@@ -19,6 +19,7 @@ def get_logger(name: str, level: Optional[str] = None) -> logging.Logger:
     """
     logger = logging.getLogger(name)
 
+    # Only configure if not already configured
     if not logger.handlers:
         # Create handler
         handler = logging.StreamHandler(sys.stderr)
@@ -32,10 +33,13 @@ def get_logger(name: str, level: Optional[str] = None) -> logging.Logger:
         # Add handler to logger
         logger.addHandler(handler)
 
-        # Set level
-        log_level = level or os.environ.get("aixterm_LOG_LEVEL", "WARNING")
-        if log_level:
-            logger.setLevel(getattr(logging, log_level.upper(), logging.WARNING))
+    # Set level - check environment variable as fallback
+    if level:
+        logger.setLevel(getattr(logging, level.upper(), logging.WARNING))
+    elif not logger.level or logger.level == logging.NOTSET:
+        # Only set default if no level is already set
+        log_level = os.environ.get("AIXTERM_LOG_LEVEL", "WARNING")
+        logger.setLevel(getattr(logging, log_level.upper(), logging.WARNING))
 
     return logger
 

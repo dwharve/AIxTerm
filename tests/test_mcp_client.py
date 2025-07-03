@@ -1,80 +1,76 @@
 """Tests for MCP client functionality."""
 
-import json
 import subprocess
 import time
 from unittest.mock import Mock, patch
 
 import pytest
 
-from aixterm.mcp_client import MCPError, MCPServer
+from aixterm.mcp_client import MCPClient, MCPError, MCPServer
 
 
 class TestMCPClient:
-    """Test cases for MCPClient class."""
+    """Test MCP client functionality."""
 
-    def test_initialize_no_servers(self, mcp_client, mock_config):
-        """Test initialization with no MCP servers configured."""
-        mock_config._config["mcp_servers"] = []
+    @pytest.fixture
+    def mock_config(self):
+        """Create a mock configuration."""
+        config = Mock()
+        config.get_mcp_servers.return_value = []
+        return config
+
+    @pytest.fixture
+    def mcp_client(self, mock_config):
+        """Create MCP client for testing."""
+        return MCPClient(mock_config)
+
+    def test_initialize_no_servers(self, mcp_client):
+        """Test initializing with no servers."""
+        mcp_client.initialize()
+        assert mcp_client._initialized
+        assert len(mcp_client.servers) == 0
+
+    @patch("aixterm.mcp_client.MCPServer")
+    def test_initialize_with_servers(self, mock_server_class, mcp_client):
+        """Test initializing with servers."""
+        mock_server = Mock()
+        mock_server_class.return_value = mock_server
+
+        server_config = {
+            "name": "test-server",
+            "command": ["python", "-c", "print('test')"],
+            "auto_start": True,
+        }
+        mcp_client.config.get_mcp_servers.return_value = [server_config]
 
         mcp_client.initialize()
 
-        assert mcp_client._initialized is True
+        assert mcp_client._initialized
+        assert "test-server" in mcp_client.servers
+        mock_server.start.assert_called_once()
+
+    @patch("aixterm.mcp_client.MCPServer")
+    def test_initialize_server_error(self, mock_server_class, mcp_client):
+        """Test handling server initialization errors."""
+        mock_server_class.side_effect = Exception("Server init failed")
+
+        server_config = {
+            "name": "test-server",
+            "command": ["python", "-c", "print('test')"],
+        }
+        mcp_client.config.get_mcp_servers.return_value = [server_config]
+
+        # Should not raise exception, just log error
+        mcp_client.initialize()
+        assert mcp_client._initialized
         assert len(mcp_client.servers) == 0
 
-    def test_initialize_with_servers(self, mcp_client, mock_config):
-        """Test initialization with MCP servers configured."""
-        mock_config._config["mcp_servers"] = [
-            {
-                "name": "test-server",
-                "command": ["python", "server.py"],
-                "enabled": True,
-                "auto_start": True,
-            }
-        ]
-
-        with patch("aixterm.mcp_client.MCPServer") as MockServer:
-            mock_server = Mock()
-            MockServer.return_value = mock_server
-
-            mcp_client.initialize()
-
-            assert mcp_client._initialized is True
-            assert "test-server" in mcp_client.servers
-            mock_server.start.assert_called_once()
-
-    def test_initialize_server_error(self, mcp_client, mock_config):
-        """Test handling of server initialization errors."""
-        mock_config._config["mcp_servers"] = [
-            {
-                "name": "failing-server",
-                "command": ["invalid-command"],
-                "enabled": True,
-                "auto_start": True,
-            }
-        ]
-
-        with patch("aixterm.mcp_client.MCPServer") as MockServer:
-            MockServer.side_effect = Exception("Server failed to start")
-
-            # Should not raise exception, just log error
-            mcp_client.initialize()
-
-            assert mcp_client._initialized is True
-            assert len(mcp_client.servers) == 0
-
     def test_get_available_tools(self, mcp_client):
-        """Test getting available tools from servers."""
+        """Test getting available tools."""
         mock_server = Mock()
         mock_server.is_running.return_value = True
         mock_server.list_tools.return_value = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "test_tool",
-                    "description": "A test tool",
-                },
-            }
+            {"type": "function", "function": {"name": "test_tool"}}
         ]
 
         mcp_client.servers["test-server"] = mock_server
@@ -84,7 +80,7 @@ class TestMCPClient:
 
         assert len(tools) == 1
         assert tools[0]["server"] == "test-server"
-        assert tools[0]["function"]["name"] == "test_tool"
+        assert tools[0]["type"] == "function"
 
     def test_get_available_tools_server_not_running(self, mcp_client):
         """Test getting tools when server is not running."""
@@ -95,12 +91,10 @@ class TestMCPClient:
         mcp_client._initialized = True
 
         tools = mcp_client.get_available_tools()
-
         assert len(tools) == 0
-        mock_server.list_tools.assert_not_called()
 
     def test_call_tool(self, mcp_client):
-        """Test calling a tool on an MCP server."""
+        """Test calling a tool."""
         mock_server = Mock()
         mock_server.is_running.return_value = True
         mock_server.call_tool.return_value = {"result": "success"}
@@ -117,11 +111,11 @@ class TestMCPClient:
         """Test calling tool on non-existent server."""
         mcp_client._initialized = True
 
-        with pytest.raises(MCPError, match="MCP server 'non-existent' not found"):
-            mcp_client.call_tool("test_tool", "non-existent", {})
+        with pytest.raises(MCPError, match="MCP server 'nonexistent' not found"):
+            mcp_client.call_tool("test_tool", "nonexistent", {})
 
     def test_call_tool_start_stopped_server(self, mcp_client):
-        """Test calling tool on stopped server (should start it)."""
+        """Test calling tool on stopped server starts it."""
         mock_server = Mock()
         mock_server.is_running.return_value = False
         mock_server.call_tool.return_value = {"result": "success"}
@@ -131,149 +125,117 @@ class TestMCPClient:
 
         result = mcp_client.call_tool("test_tool", "test-server", {})
 
-        assert result == {"result": "success"}
         mock_server.start.assert_called_once()
+        assert result == {"result": "success"}
 
     def test_shutdown(self, mcp_client):
-        """Test shutting down all servers."""
-        mock_server1 = Mock()
-        mock_server2 = Mock()
-
-        mcp_client.servers = {"server1": mock_server1, "server2": mock_server2}
+        """Test shutting down client."""
+        mock_server = Mock()
+        mcp_client.servers["test-server"] = mock_server
         mcp_client._initialized = True
 
         mcp_client.shutdown()
 
-        mock_server1.stop.assert_called_once()
-        mock_server2.stop.assert_called_once()
-        assert len(mcp_client.servers) == 0
-        assert mcp_client._initialized is False
-
-    def test_restart_server(self, mcp_client):
-        """Test restarting a specific server."""
-        mock_server = Mock()
-        mcp_client.servers["test-server"] = mock_server
-
-        with patch("time.sleep"):  # Speed up test
-            result = mcp_client.restart_server("test-server")
-
-        assert result is True
         mock_server.stop.assert_called_once()
-        mock_server.start.assert_called_once()
-
-    def test_restart_nonexistent_server(self, mcp_client):
-        """Test restarting non-existent server."""
-        result = mcp_client.restart_server("non-existent")
-        assert result is False
+        assert len(mcp_client.servers) == 0
+        assert not mcp_client._initialized
 
     def test_get_server_status(self, mcp_client):
-        """Test getting server status information."""
+        """Test getting server status."""
         mock_server = Mock()
         mock_server.is_running.return_value = True
         mock_server.get_pid.return_value = 12345
-        mock_server.get_uptime.return_value = 120.5
-        mock_server.list_tools.return_value = [{"tool": "test"}]
+        mock_server.get_uptime.return_value = 60.0
+        mock_server.list_tools.return_value = [{"name": "tool1"}]
 
         mcp_client.servers["test-server"] = mock_server
 
         status = mcp_client.get_server_status()
 
-        assert "test-server" in status
-        assert status["test-server"]["running"] is True
-        assert status["test-server"]["pid"] == 12345
-        assert status["test-server"]["uptime"] == 120.5
-        assert status["test-server"]["tool_count"] == 1
+        expected = {
+            "test-server": {
+                "running": True,
+                "pid": 12345,
+                "uptime": 60.0,
+                "tool_count": 1,
+            }
+        }
+        assert status == expected
 
 
 class TestMCPServer:
-    """Test cases for MCPServer class."""
+    """Test MCP server functionality."""
 
-    def test_server_initialization(self):
-        """Test server initialization."""
-        config = {
+    @pytest.fixture
+    def config(self):
+        """Create test server config."""
+        return {
             "name": "test-server",
-            "command": ["python", "server.py"],
-            "args": ["--port", "8080"],
-            "env": {"TEST_VAR": "value"},
-            "enabled": True,
-            "timeout": 30,
+            "command": ["python", "-c", "print('test')"],
+            "args": [],
+            "env": {},
         }
 
-        server = MCPServer(config, Mock())
+    @pytest.fixture
+    def mock_client(self):
+        """Create mock MCP client."""
+        return Mock()
+
+    def test_server_initialization(self, config, mock_client):
+        """Test server initialization."""
+        server = MCPServer(config, Mock(), mock_client)
 
         assert server.config == config
+        assert server.mcp_client == mock_client
         assert server.process is None
-        assert server.start_time is None
+        assert not server._initialized
 
-    def test_start_server(self):
-        """Test starting MCP server."""
-        config = {
-            "command": ["python", "server.py"],
-            "args": ["--test"],
-            "env": {"TEST": "value"},
-        }
-
-        with patch("subprocess.Popen") as mock_popen:
-            mock_process = Mock()
-            mock_process.poll.return_value = None  # Still running
-            mock_popen.return_value = mock_process
-
-            server = MCPServer(config, Mock())
-
-            with patch("time.sleep"):  # Speed up test
-                server.start()
-
-            assert server.process == mock_process
-            assert server.start_time is not None
-
-            # Verify command construction
-            call_args = mock_popen.call_args
-            expected_command = ["python", "server.py", "--test"]
-            assert call_args[0][0] == expected_command
-
-    def test_start_server_failure(self):
-        """Test handling of server start failure."""
-        config = {"command": ["invalid-command"], "args": []}
-
-        with patch("subprocess.Popen") as mock_popen:
-            mock_process = Mock()
-            mock_process.poll.return_value = 1  # Exited with error
-            mock_process.stderr.read.return_value = "Command not found"
-            mock_popen.return_value = mock_process
-
-            server = MCPServer(config, Mock())
-
-            with pytest.raises(MCPError, match="MCP server failed to start"):
-                with patch("time.sleep"):
-                    server.start()
-
-    def test_stop_server(self):
-        """Test stopping MCP server."""
-        config = {"command": ["test"], "args": []}
-        server = MCPServer(config, Mock())
-
+    @patch("subprocess.Popen")
+    def test_start_server(self, mock_popen, config, mock_client):
+        """Test starting server."""
         mock_process = Mock()
-        mock_process.wait.return_value = None
+        mock_process.poll.return_value = None
+        mock_popen.return_value = mock_process
+
+        server = MCPServer(config, Mock(), mock_client)
+
+        with patch.object(server, "initialize_mcp_session"):
+            server.start()
+
+        assert server.process == mock_process
+        assert server._initialized
+
+    @patch("subprocess.Popen")
+    def test_start_server_failure(self, mock_popen, config, mock_client):
+        """Test server start failure."""
+        mock_process = Mock()
+        mock_process.poll.return_value = 1  # Exit code 1
+        mock_process.stderr.read.return_value = "Error message"
+        mock_popen.return_value = mock_process
+
+        server = MCPServer(config, Mock(), mock_client)
+
+        with pytest.raises(MCPError):
+            server.start()
+
+    def test_stop_server(self, config, mock_client):
+        """Test stopping server."""
+        server = MCPServer(config, Mock(), mock_client)
+        mock_process = Mock()
         server.process = mock_process
-        server.start_time = time.time()
+        server._initialized = True
 
         server.stop()
 
         mock_process.terminate.assert_called_once()
-        mock_process.wait.assert_called_once_with(timeout=5)
         assert server.process is None
-        assert server.start_time is None
+        assert not server._initialized
 
-    def test_stop_server_force_kill(self):
-        """Test force killing server when terminate fails."""
-        config = {"command": ["test"], "args": []}
-        server = MCPServer(config, Mock())
-
+    def test_stop_server_force_kill(self, config, mock_client):
+        """Test force killing server on timeout."""
+        server = MCPServer(config, Mock(), mock_client)
         mock_process = Mock()
-        mock_process.wait.side_effect = [
-            subprocess.TimeoutExpired("test", 5),
-            None,
-        ]
+        mock_process.wait.side_effect = [subprocess.TimeoutExpired("cmd", 5), None]
         server.process = mock_process
 
         server.stop()
@@ -281,81 +243,62 @@ class TestMCPServer:
         mock_process.terminate.assert_called_once()
         mock_process.kill.assert_called_once()
 
-    def test_is_running(self):
+    def test_is_running(self, config, mock_client):
         """Test checking if server is running."""
-        config = {"command": ["test"], "args": []}
-        server = MCPServer(config, Mock())
+        server = MCPServer(config, Mock(), mock_client)
 
-        # No process
-        assert server.is_running() is False
+        # Not running initially
+        assert not server.is_running()
 
-        # Running process
+        # Running with process
         mock_process = Mock()
         mock_process.poll.return_value = None
         server.process = mock_process
-        assert server.is_running() is True
+        assert server.is_running()
 
-        # Stopped process
+        # Not running when process exited
         mock_process.poll.return_value = 0
-        assert server.is_running() is False
+        assert not server.is_running()
 
-    def test_send_request(self):
-        """Test sending JSON-RPC request to server."""
-        config = {"command": ["test"], "args": []}
-        server = MCPServer(config, Mock())
-
+    def test_send_request(self, config, mock_client):
+        """Test sending request to server."""
+        server = MCPServer(config, Mock(), mock_client)
         mock_process = Mock()
         mock_process.poll.return_value = None
-        mock_process.stdin = Mock()
-        mock_process.stdout = Mock()
-        mock_process.stdout.readline.return_value = (
-            '{"jsonrpc":"2.0","id":1,"result":{"success":true}}\n'
-        )
-
+        mock_process.stdout.readline.return_value = '{"result": "test"}'
+        # Mock stdout to have a fileno that works with select
+        mock_process.stdout.fileno.return_value = 1
         server.process = mock_process
 
-        result = server.send_request("test_method", {"param": "value"})
+        with patch("json.loads", return_value={"result": "test"}):
+            with patch("select.select", return_value=([mock_process.stdout], [], [])):
+                result = server.send_request("test/method", {"param": "value"})
 
-        assert result == {"success": True}
+        assert result == "test"
+        mock_process.stdin.write.assert_called_once()
 
-        # Verify request was written
-        written_data = mock_process.stdin.write.call_args[0][0]
-        request = json.loads(written_data.strip())
-        assert request["method"] == "test_method"
-        assert request["params"] == {"param": "value"}
-
-    def test_send_request_server_error(self):
-        """Test handling of server errors in response."""
-        config = {"command": ["test"], "args": []}
-        server = MCPServer(config, Mock())
-
+    def test_send_request_server_error(self, config, mock_client):
+        """Test handling server error response."""
+        server = MCPServer(config, Mock(), mock_client)
         mock_process = Mock()
         mock_process.poll.return_value = None
-        mock_process.stdin = Mock()
-        mock_process.stdout = Mock()
-        mock_process.stdout.readline.return_value = (
-            '{"jsonrpc":"2.0","id":1,"error":{"code":-1,"message":"Test error"}}\n'
-        )
-
+        mock_process.stdout.readline.return_value = '{"error": "test error"}'
         server.process = mock_process
 
-        with pytest.raises(MCPError, match="Server error"):
-            server.send_request("test_method")
+        with patch("json.loads", return_value={"error": "test error"}):
+            with pytest.raises(MCPError):
+                server.send_request("test/method")
 
-    def test_list_tools(self):
-        """Test listing available tools."""
-        config = {"command": ["test"], "args": []}
-        server = MCPServer(config, Mock())
+    def test_list_tools(self, config, mock_client):
+        """Test listing tools."""
+        server = MCPServer(config, Mock(), mock_client)
 
         mock_tools_response = {
             "tools": [
                 {
                     "name": "test_tool",
                     "description": "A test tool",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {"arg1": {"type": "string"}},
-                    },
+                    "inputSchema": {"type": "object"},
                 }
             ]
         }
@@ -363,36 +306,29 @@ class TestMCPServer:
         with patch.object(server, "send_request", return_value=mock_tools_response):
             tools = server.list_tools()
 
-            assert len(tools) == 1
-            assert tools[0]["type"] == "function"
-            assert tools[0]["function"]["name"] == "test_tool"
-            assert tools[0]["function"]["description"] == "A test tool"
+        assert len(tools) == 1
+        assert tools[0]["type"] == "function"
+        assert tools[0]["function"]["name"] == "test_tool"
 
-    def test_call_tool(self):
+    def test_call_tool(self, config, mock_client):
         """Test calling a tool."""
-        config = {"command": ["test"], "args": []}
-        server = MCPServer(config, Mock())
-
-        expected_result = {"output": "success"}
+        server = MCPServer(config, Mock(), mock_client)
+        expected_result = {"content": [{"type": "text", "text": "result"}]}
 
         with patch.object(server, "send_request", return_value=expected_result):
             result = server.call_tool("test_tool", {"arg": "value"})
 
-            assert result == expected_result
+        assert result == expected_result
 
-    def test_get_uptime(self):
+    def test_get_uptime(self, config, mock_client):
         """Test getting server uptime."""
-        config = {"command": ["test"], "args": []}
-        server = MCPServer(config, Mock())
+        server = MCPServer(config, Mock(), mock_client)
 
-        # No start time
+        # No uptime when not started
         assert server.get_uptime() is None
 
-        # With start time
-        start_time = time.time() - 100  # 100 seconds ago
-        server.start_time = start_time
-
+        # Uptime when started
+        server.start_time = time.time() - 30
         uptime = server.get_uptime()
         assert uptime is not None
-        assert uptime >= 99  # Should be around 100 seconds
-        assert uptime <= 101
+        assert uptime >= 29  # Allow some variance

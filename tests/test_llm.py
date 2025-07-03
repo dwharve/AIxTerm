@@ -42,7 +42,7 @@ class TestLLMClient:
             "choices": [{"message": {"content": "Hello! How can I help you?"}}]
         }
 
-        with patch("aixterm.llm.requests.post") as mock_post:
+        with patch("aixterm.llm.client.requests.post") as mock_post:
             mock_response = Mock()
             mock_response.raise_for_status.return_value = None
             mock_response.json.return_value = mock_response_data
@@ -80,7 +80,7 @@ class TestLLMClient:
         """Test handling of request errors."""
         messages = [{"role": "user", "content": "Test"}]
 
-        with patch("aixterm.llm.requests.post") as mock_post:
+        with patch("aixterm.llm.client.requests.post") as mock_post:
             mock_post.side_effect = Exception("Network error")
 
             with pytest.raises(LLMError, match="Unexpected error"):
@@ -90,7 +90,7 @@ class TestLLMClient:
         """Test handling of HTTP errors."""
         messages = [{"role": "user", "content": "Test"}]
 
-        with patch("aixterm.llm.requests.post") as mock_post:
+        with patch("aixterm.llm.client.requests.post") as mock_post:
             mock_response = Mock()
             mock_response.raise_for_status.side_effect = (
                 requests.exceptions.RequestException("HTTP 500")
@@ -110,7 +110,7 @@ class TestLLMClient:
             b"",  # Empty line
         ]
 
-        with patch("aixterm.llm.requests.post") as mock_post:
+        with patch("aixterm.llm.client.requests.post") as mock_post:
             mock_response = Mock()
             mock_response.raise_for_status.return_value = None
             mock_response.iter_lines.return_value = mock_lines
@@ -132,7 +132,7 @@ class TestLLMClient:
             b"data: [DONE]",
         ]
 
-        with patch("aixterm.llm.requests.post") as mock_post:
+        with patch("aixterm.llm.client.requests.post") as mock_post:
             mock_response = Mock()
             mock_response.raise_for_status.return_value = None
             mock_response.iter_lines.return_value = mock_lines
@@ -157,7 +157,7 @@ class TestLLMClient:
             b"data: [DONE]",
         ]
 
-        with patch("aixterm.llm.requests.post") as mock_post:
+        with patch("aixterm.llm.client.requests.post") as mock_post:
             mock_response = Mock()
             mock_response.raise_for_status.return_value = None
             mock_response.iter_lines.return_value = mock_lines
@@ -213,7 +213,7 @@ class TestLLMClient:
         """Test that authorization header is included when API key is set."""
         llm_client.config.set("api_key", "test-api-key")
 
-        with patch("aixterm.llm.requests.post") as mock_post:
+        with patch("aixterm.llm.client.requests.post") as mock_post:
             mock_response = Mock()
             mock_response.raise_for_status.return_value = None
             mock_response.iter_lines.return_value = [b"data: [DONE]"]

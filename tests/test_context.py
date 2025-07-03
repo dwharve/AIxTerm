@@ -11,7 +11,7 @@ class TestTerminalContext:
     def test_get_terminal_context_with_log(self, context_manager, sample_log_file):
         """Test getting terminal context with existing log file."""
         with patch.object(
-            context_manager, "_find_log_file", return_value=sample_log_file
+            context_manager.log_processor, "find_log_file", return_value=sample_log_file
         ):
             context = context_manager.get_terminal_context()
 
@@ -22,7 +22,9 @@ class TestTerminalContext:
 
     def test_get_terminal_context_no_log(self, context_manager):
         """Test getting terminal context when no log file exists."""
-        with patch.object(context_manager, "_find_log_file", return_value=None):
+        with patch.object(
+            context_manager.log_processor, "find_log_file", return_value=None
+        ):
             context = context_manager.get_terminal_context()
 
             assert "Current working directory:" in context
@@ -37,7 +39,7 @@ class TestTerminalContext:
         if hasattr(os, "ttyname"):
             with patch("os.ttyname", return_value="/dev/pts/0"):
                 with patch.object(context_manager.config, "get", return_value=200):
-                    log_path = context_manager._find_log_file()
+                    log_path = context_manager.log_processor.find_log_file()
                     assert log_path == expected_log
         else:
             # On Windows, add the ttyname function temporarily and mock stdin.fileno
@@ -48,7 +50,7 @@ class TestTerminalContext:
             try:
                 with patch.object(sys.stdin, "fileno", return_value=0):
                     with patch.object(context_manager.config, "get", return_value=200):
-                        log_path = context_manager._find_log_file()
+                        log_path = context_manager.log_processor.find_log_file()
                         assert log_path == expected_log
             finally:
                 # Clean up
@@ -70,15 +72,12 @@ class TestTerminalContext:
         new_log.touch()
 
         # Test fallback behavior when TTY is not available
-        if hasattr(os, "ttyname"):
-            # On Unix systems, test OSError fallback
-            with patch("os.ttyname", side_effect=OSError("No TTY")):
-                log_path = context_manager._find_log_file()
-                assert log_path == new_log
-        else:
-            # On Windows, ttyname doesn't exist so fallback is used automatically
-            log_path = context_manager._find_log_file()
-            assert log_path == new_log  # Should return most recent
+        # Mock the _get_current_tty method directly to return None
+        with patch.object(
+            context_manager.log_processor, "_get_current_tty", return_value=None
+        ):
+            log_path = context_manager.log_processor.find_log_file()
+            assert log_path == new_log
 
     def test_read_and_truncate_log_with_tiktoken(
         self, context_manager, sample_log_file
@@ -91,7 +90,7 @@ class TestTerminalContext:
             mock_tiktoken.return_value = mock_encoder
 
             # Use a known model name that won't trigger fallback
-            result = context_manager._read_and_truncate_log(
+            result = context_manager.log_processor._read_and_truncate_log(
                 sample_log_file, 30, "gpt-3.5-turbo"
             )
 
@@ -102,7 +101,7 @@ class TestTerminalContext:
     def test_read_and_truncate_log_fallback(self, context_manager, sample_log_file):
         """Test reading and truncating log with fallback method."""
         with patch("tiktoken.get_encoding", side_effect=Exception("No tiktoken")):
-            result = context_manager._read_and_truncate_log(
+            result = context_manager.log_processor._read_and_truncate_log(
                 sample_log_file, 10, "test-model"
             )
 
@@ -120,7 +119,9 @@ class TestTerminalContext:
 
         original_size = len(lines)
 
-        context_manager._read_and_truncate_log(large_log, 100, "test-model")
+        context_manager.log_processor._read_and_truncate_log(
+            large_log, 100, "test-model"
+        )
 
         # File should be truncated to 1000 lines
         with open(large_log, "r") as f:
@@ -149,11 +150,15 @@ class TestTerminalContext:
 
     def test_create_log_entry(self, context_manager, mock_home_dir):
         """Test creating log entries."""
-        with patch.object(context_manager, "_get_current_log_file") as mock_get_log:
+        with patch.object(
+            context_manager.log_processor, "_get_current_log_file"
+        ) as mock_get_log:
             log_file = mock_home_dir / ".aixterm_log.test"
             mock_get_log.return_value = log_file
 
-            context_manager.create_log_entry("ls -la", "file listing output")
+            context_manager.log_processor.create_log_entry(
+                "ls -la", "file listing output"
+            )
 
             assert log_file.exists()
             content = log_file.read_text()
@@ -167,7 +172,7 @@ class TestTerminalContext:
             with patch("os.ttyname", return_value="/dev/pts/1"), patch.object(
                 sys.stdin, "fileno", return_value=0
             ):
-                log_path = context_manager._get_current_log_file()
+                log_path = context_manager.log_processor._get_current_log_file()
                 assert log_path == mock_home_dir / ".aixterm_log.pts-1"
         else:
             # On Windows, add the ttyname function temporarily and mock stdin.fileno
@@ -177,7 +182,7 @@ class TestTerminalContext:
             os.ttyname = mock_ttyname
             try:
                 with patch.object(sys.stdin, "fileno", return_value=0):
-                    log_path = context_manager._get_current_log_file()
+                    log_path = context_manager.log_processor._get_current_log_file()
                     assert log_path == mock_home_dir / ".aixterm_log.pts-1"
             finally:
                 # Clean up
@@ -189,19 +194,19 @@ class TestTerminalContext:
         if hasattr(os, "ttyname"):
             # On Unix systems, test OSError fallback
             with patch("os.ttyname", side_effect=OSError("No TTY")):
-                log_path = context_manager._get_current_log_file()
+                log_path = context_manager.log_processor._get_current_log_file()
                 assert log_path == mock_home_dir / ".aixterm_log.default"
         else:
             # On Windows, ttyname doesn't exist so fallback is used automatically
-            log_path = context_manager._get_current_log_file()
+            log_path = context_manager.log_processor._get_current_log_file()
             expected = mock_home_dir / ".aixterm_log.default"
             assert log_path == expected
 
     def test_error_handling_in_context_retrieval(self, context_manager):
         """Test error handling during context retrieval."""
         with patch.object(
-            context_manager,
-            "_find_log_file",
+            context_manager.log_processor,
+            "find_log_file",
             side_effect=Exception("Test error"),
         ):
             context = context_manager.get_terminal_context()
@@ -218,7 +223,9 @@ class TestTerminalContext:
             f.write(b"Valid text\n\xff\xfe\nMore valid text\n")
 
         # Should handle encoding errors gracefully
-        result = context_manager._read_and_truncate_log(log_file, 100, "test-model")
+        result = context_manager.log_processor._read_and_truncate_log(
+            log_file, 100, "test-model"
+        )
         assert isinstance(result, str)
         assert "Valid text" in result or "More valid text" in result
 
@@ -302,7 +309,7 @@ class TestSmartContextSummarization:
         try:
             os.chdir(tmp_path)
 
-            result = context_manager._get_directory_context()
+            result = context_manager.directory_handler.get_directory_context()
 
             assert "Python" in result
             assert "requirements.txt" in result
@@ -315,14 +322,14 @@ class TestSmartContextSummarization:
         """Test Python project detection."""
         (tmp_path / "requirements.txt").touch()
 
-        result = context_manager._detect_project_type(tmp_path)
+        result = context_manager.directory_handler._detect_project_type(tmp_path)
         assert "Python" in result
 
     def test_detect_project_type_nodejs(self, context_manager, tmp_path):
         """Test Node.js project detection."""
         (tmp_path / "package.json").write_text('{"name": "test"}')
 
-        result = context_manager._detect_project_type(tmp_path)
+        result = context_manager.directory_handler._detect_project_type(tmp_path)
         assert "Node.js" in result
 
     def test_intelligent_log_summarization(self, context_manager):
@@ -340,7 +347,7 @@ $ echo "test"
 test
 """
 
-        result = context_manager._intelligently_summarize_log(
+        result = context_manager.log_processor._intelligently_summarize_log(
             log_content, 1000, "gpt-3.5-turbo"
         )
 
@@ -352,7 +359,9 @@ test
         """Test token limit application."""
         long_text = "word " * 1000  # Long text
 
-        result = context_manager._apply_token_limit(long_text, 50, "gpt-3.5-turbo")
+        result = context_manager.token_manager.apply_token_limit(
+            long_text, 50, "gpt-3.5-turbo"
+        )
 
         # Should be shorter than the original
         assert len(result) < len(long_text)
@@ -367,7 +376,9 @@ class TestAdvancedTerminalContext:
         log_file = tmp_path / ".aixterm_log.default"
         log_file.write_text("$ echo hello\nhello\n$ ls\nfile1.txt\nfile2.txt")
 
-        with patch.object(context_manager, "_find_log_file", return_value=log_file):
+        with patch.object(
+            context_manager.log_processor, "find_log_file", return_value=log_file
+        ):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_terminal_context(smart_summarize=True)
 
@@ -381,7 +392,9 @@ class TestAdvancedTerminalContext:
         log_file = tmp_path / ".aixterm_log.default"
         log_file.write_text("$ echo hello\nhello")
 
-        with patch.object(context_manager, "_find_log_file", return_value=log_file):
+        with patch.object(
+            context_manager.log_processor, "find_log_file", return_value=log_file
+        ):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_terminal_context(smart_summarize=False)
 
@@ -399,7 +412,9 @@ class TestOptimizedContext:
         log_file = tmp_path / ".aixterm_log.default"
         log_file.write_text("$ echo hello\nhello\n$ ls\nfile1.txt\nfile2.txt")
 
-        with patch.object(context_manager, "_find_log_file", return_value=log_file):
+        with patch.object(
+            context_manager.log_processor, "find_log_file", return_value=log_file
+        ):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_optimized_context(query="test query")
 
@@ -415,7 +430,9 @@ class TestOptimizedContext:
         log_file = tmp_path / ".aixterm_log.default"
         log_file.write_text("$ python test.py\nhello world")
 
-        with patch.object(context_manager, "_find_log_file", return_value=log_file):
+        with patch.object(
+            context_manager.log_processor, "find_log_file", return_value=log_file
+        ):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_optimized_context(
                     [str(test_file)], "analyze this code"
@@ -429,7 +446,7 @@ class TestOptimizedContext:
         """Test token estimation functionality."""
         # Test with simple text
         short_text = "Hello world"
-        tokens = context_manager._estimate_tokens(short_text)
+        tokens = context_manager.token_manager.estimate_tokens(short_text)
 
         # Should return a reasonable estimate
         assert isinstance(tokens, int)
@@ -438,7 +455,7 @@ class TestOptimizedContext:
 
     def test_estimate_tokens_empty(self, context_manager):
         """Test token estimation with empty text."""
-        tokens = context_manager._estimate_tokens("")
+        tokens = context_manager.token_manager.estimate_tokens("")
         assert tokens == 0
 
     def test_optimized_context_budget_management(self, context_manager, tmp_path):
@@ -448,7 +465,9 @@ class TestOptimizedContext:
         log_file = tmp_path / ".aixterm_log.default"
         log_file.write_text(large_content)
 
-        with patch.object(context_manager, "_find_log_file", return_value=log_file):
+        with patch.object(
+            context_manager.log_processor, "find_log_file", return_value=log_file
+        ):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_optimized_context(
                     query="test with large content"

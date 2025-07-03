@@ -9,7 +9,8 @@ from .cleanup import CleanupManager
 from .config import AIxTermConfig
 from .context import TerminalContext
 from .llm import LLMClient, LLMError
-from .mcp_client import MCPClient
+from .mcp_client import MCPClient, ProgressParams
+from .progress_display import create_progress_display
 from .utils import get_logger
 
 
@@ -24,6 +25,10 @@ class AIxTerm:
         """
         self.config = AIxTermConfig(Path(config_path) if config_path else None)
         self.logger = get_logger(__name__)
+
+        # Initialize progress display
+        progress_type = self.config.get("progress_display_type", "bar")
+        self.progress_display = create_progress_display(progress_type)
 
         # Initialize components
         self.context_manager = TerminalContext(self.config)
@@ -74,9 +79,19 @@ class AIxTerm:
             # Get available tools from MCP servers with intelligent management
             tools = None
             if self.config.get_mcp_servers():
+                # Show progress for tool discovery
+                tool_progress = self.progress_display.create_progress(
+                    progress_token="tool_discovery",
+                    title="Discovering available tools",
+                    total=None,
+                    show_immediately=True,
+                )
+
                 try:
                     all_tools = self.mcp_client.get_available_tools(brief=True)
                     if all_tools:
+                        tool_progress.update(len(all_tools), "Analyzing tool relevance")
+
                         # Calculate tokens used by context
                         import tiktoken
 
@@ -95,20 +110,40 @@ class AIxTerm:
                             all_tools, query, available_tool_tokens
                         )
 
+                        tool_progress.complete(
+                            f"Selected {len(tools)}/{len(all_tools)} relevant tools"
+                        )
+
                         self.logger.info(
                             f"Optimized tools: {len(tools)}/{len(all_tools)} tools "
                             f"selected for context"
                         )
                     else:
                         tools = []
+                        tool_progress.complete("No tools available")
                 except Exception as e:
                     self.logger.error(f"Failed to get MCP tools: {e}")
+                    tool_progress.complete("Tool discovery failed")
                     tools = None
 
-            # Send query to LLM
-            response = self.llm_client.ask_with_context(
-                query, context, tools, use_planning=use_planning
+            # Show progress for LLM processing
+            llm_progress = self.progress_display.create_progress(
+                progress_token="llm_processing",
+                title="Processing with AI",
+                total=None,
+                show_immediately=True,
             )
+
+            try:
+                # Send query to LLM
+                response = self.llm_client.ask_with_context(
+                    query, context, tools, use_planning=use_planning
+                )
+
+                llm_progress.complete("AI processing completed")
+            except Exception:
+                llm_progress.complete("AI processing failed")
+                raise
 
             if not response.strip():
                 print("No response received from AI.")
@@ -160,6 +195,40 @@ class AIxTerm:
         """
         # Log the interaction for context
         self.context_manager.create_log_entry(f"ai '{original_query}'", response)
+
+    def _create_progress_callback(
+        self, progress_token: str, title: str = "Processing"
+    ) -> None:
+        """Create a progress callback for MCP tool calls.
+
+        Args:
+            progress_token: Progress token for this operation
+            title: Title to display for the progress
+        """
+
+        def progress_callback(params: ProgressParams) -> None:
+            """Handle progress updates from MCP tools."""
+            try:
+                # Update or create progress display
+                self.progress_display.update_progress(
+                    progress_token=params.progress_token,
+                    progress=params.progress,
+                    message=params.message,
+                    total=params.total,
+                )
+            except Exception as e:
+                self.logger.debug(f"Error updating progress display: {e}")
+
+        # Register the callback with MCP client
+        self.mcp_client.register_progress_callback(progress_token, progress_callback)
+
+        # Create initial progress display
+        self.progress_display.create_progress(
+            progress_token=progress_token,
+            title=title,
+            total=None,  # Will be set when first update arrives
+            show_immediately=True,
+        )
 
     def list_tools(self) -> None:
         """List available MCP tools."""
@@ -241,10 +310,33 @@ class AIxTerm:
             for error in results["errors"][:3]:  # Show first 3 errors
                 print(f"    {error}")
 
+    def clear_context(self) -> None:
+        """Clear context for the active session."""
+        print("Clearing context for active session...")
+        try:
+            # Clear the session log file for the current TTY
+            cleared = self.context_manager.clear_session_context()
+            if cleared:
+                print("✓ Session context cleared successfully")
+                print(
+                    "  The conversation history for this terminal session "
+                    "has been removed"
+                )
+            else:
+                print("ℹ No active session context found to clear")
+                print("  This may be a new session or context was already empty")
+        except Exception as e:
+            self.logger.error(f"Error clearing context: {e}")
+            print(f"✗ Failed to clear context: {e}")
+
     def shutdown(self) -> None:
         """Shutdown AIxTerm gracefully."""
         self.logger.info("Shutting down AIxTerm")
         try:
+            # Clean up progress displays
+            self.progress_display.cleanup_all()
+
+            # Shutdown MCP client
             self.mcp_client.shutdown()
         except Exception as e:
             self.logger.error(f"Error shutting down MCP client: {e}")
@@ -289,17 +381,17 @@ class AIxTerm:
             use_planning: Whether to use planning-focused prompt
         """
         try:
-            # Initialize MCP client for CLI mode (starts servers)
+            # Initialize MCP client (starts servers)
             if self.config.get_mcp_servers():
-                self.mcp_client.initialize_for_cli_mode()
+                self.mcp_client.initialize()
 
             # Run the normal query processing
             self.run(query, file_contexts, use_planning)
 
         finally:
-            # Always clean up MCP servers started for CLI mode
+            # Always clean up MCP servers
             if self.config.get_mcp_servers():
-                self.mcp_client.shutdown_cli_mode_servers()
+                self.mcp_client.shutdown()
 
     def install_shell_integration(self, shell: str = "bash") -> None:
         """Install shell integration for automatic terminal session logging.
@@ -307,163 +399,53 @@ class AIxTerm:
         Args:
             shell: Target shell type (bash, zsh, fish)
         """
-        from pathlib import Path
+        from typing import Dict, Type, Union
+
+        from .integration import Bash, Fish, Zsh
 
         print("Installing AIxTerm shell integration...")
 
-        # Determine shell configuration file
-        shell_configs = {
-            "bash": [".bashrc", ".bash_profile"],
-            "zsh": [".zshrc"],
-            "fish": [".config/fish/config.fish"],
+        # Get the appropriate integration class
+        integration_classes: Dict[str, Type[Union[Bash, Zsh, Fish]]] = {
+            "bash": Bash,
+            "zsh": Zsh,
+            "fish": Fish,
         }
 
-        if shell not in shell_configs:
+        if shell not in integration_classes:
             print(f"Error: Unsupported shell: {shell}")
-            print("Supported shells: bash, zsh, fish")
+            print(f"Supported shells: {', '.join(integration_classes.keys())}")
             return
 
-        home = Path.home()
-        config_files = shell_configs[shell]
+        integration_class = integration_classes[shell]
+        integration = integration_class()
 
-        # Find existing config file or use the first one
-        config_file = None
-        for cf in config_files:
-            cf_path = home / cf
-            if cf_path.exists():
-                config_file = cf_path
-                break
+        # Check if shell is available
+        if not integration.is_available():
+            print(f"Error: {shell} is not available on this system")
+            return
 
-        if not config_file:
-            config_file = home / config_files[0]
-            if shell == "fish":
-                config_file.parent.mkdir(parents=True, exist_ok=True)
+        # Validate environment
+        if not integration.validate_integration_environment():
+            print(f"Error: Environment validation failed for {shell}")
+            print("Please check:")
+            print("- TTY access is available")
+            print("- Home directory is writable")
+            return
 
-        # Create integration script content based on shell
-        if shell in ["bash", "zsh"]:
-            integration_code = """
-# AIxTerm Shell Integration
-# Automatically captures terminal activity for better AI context
+        # Install the integration
+        if integration.install():
+            print(f" Shell integration for {shell} installed successfully!")
+            print(f" Configuration file: {integration.get_selected_config_file()}")
 
-# Only run if we're in an interactive shell
-[[ $- == *i* ]] || return
+            # Show installation notes
+            notes = integration.get_installation_notes()
+            if notes:
+                print("\n Installation notes:")
+                for note in notes:
+                    print(f"  • {note}")
 
-# Function to get current log file
-_aixterm_get_log_file() {
-    local tty_name=$(tty 2>/dev/null | sed 's/\\/dev\\///g' | sed 's/\\//-/g')
-    echo "$HOME/.aixterm_log.${tty_name:-default}"
-}
-
-# Function to log commands for aixterm context
-_aixterm_log_command() {
-    # Only log if this isn't an aixterm command and we have BASH_COMMAND
-    if [[ -n "$BASH_COMMAND" ]] && [[ "$BASH_COMMAND" != *"_aixterm_"* ]] && \\
-       [[ "$BASH_COMMAND" != *"aixterm"* ]]; then
-        local log_file=$(_aixterm_get_log_file)
-        echo "$ $BASH_COMMAND" >> "$log_file" 2>/dev/null
-    fi
-}
-
-# Set up command logging
-if [[ -z "$_AIXTERM_INTEGRATION_LOADED" ]]; then
-    trap '_aixterm_log_command' DEBUG
-    export _AIXTERM_INTEGRATION_LOADED=1
-fi
-
-# Enhanced ai function that ensures proper logging
-ai() {
-    local log_file=$(_aixterm_get_log_file)
-
-    # Log the AI command
-    echo "$ ai $*" >> "$log_file" 2>/dev/null
-
-    # Run aixterm and log output
-    command aixterm "$@" 2>&1 | tee -a "$log_file"
-}
-"""
-        elif shell == "fish":
-            integration_code = """
-# AIxTerm Shell Integration for Fish
-# Automatically captures terminal activity for better AI context
-
-# Function to get current log file
-function _aixterm_get_log_file
-    set tty_name (tty 2>/dev/null | sed 's/\\/dev\\///g' | sed 's/\\//-/g')
-    echo "$HOME/.aixterm_log."(test -n "$tty_name"; and echo "$tty_name"; \\
-        or echo "default")
-end
-
-# Function to log commands for aixterm context
-function _aixterm_log_command --on-event fish_preexec
-    # Skip aixterm commands
-    if not string match -q "*aixterm*" -- $argv[1]
-        set log_file (_aixterm_get_log_file)
-        echo "$ $argv[1]" >> $log_file 2>/dev/null
-    end
-end
-
-# Enhanced ai function
-function ai
-    set log_file (_aixterm_get_log_file)
-
-    # Log the AI command
-    echo "$ ai $argv" >> $log_file 2>/dev/null
-
-    # Run aixterm and log output
-    command aixterm $argv 2>&1 | tee -a $log_file
-end
-"""
-
-        # Check if integration is already installed
-        integration_marker = "# AIxTerm Shell Integration"
-        try:
-            if config_file.exists():
-                content = config_file.read_text()
-                if integration_marker in content:
-                    print(
-                        f"Warning: AIxTerm shell integration already "
-                        f"installed in {config_file}"
-                    )
-                    response = (
-                        input("Do you want to reinstall? (y/N): ").strip().lower()
-                    )
-                    if response != "y":
-                        print("Installation cancelled.")
-                        return
-
-                    # Remove existing integration
-                    lines = content.split("\n")
-                    filtered_lines = []
-                    skip = False
-                    for line in lines:
-                        if integration_marker in line:
-                            skip = True
-                        elif skip and line.strip() == "" and not line.startswith("#"):
-                            skip = False
-                        if not skip:
-                            filtered_lines.append(line)
-
-                    content = "\n".join(filtered_lines)
-                    config_file.write_text(content)
-        except Exception as e:
-            print(f"Warning: Could not check existing integration: {e}")
-
-        # Install integration
-        try:
-            # Create backup
-            backup_file = config_file.with_suffix(
-                config_file.suffix + f".aixterm_backup_{int(__import__('time').time())}"
-            )
-            if config_file.exists():
-                backup_file.write_text(config_file.read_text())
-                print(f" Backup created: {backup_file}")
-
-            # Add integration
-            with open(config_file, "a") as f:
-                f.write(integration_code)
-
-            print(f" Shell integration installed to: {config_file}")
-            print(f" To activate: source {config_file}")
+            print(f"\n To activate: source {integration.get_selected_config_file()}")
             print("   Or start a new terminal session")
             print("")
             print(" Usage:")
@@ -472,9 +454,15 @@ end
             print("")
             print(" Log files will be created at:")
             print("  ~/.aixterm_log.*         # Session-specific log files")
+        else:
+            print(f"Error: Failed to install {shell} integration")
 
-        except Exception as e:
-            print(f"Error: Failed to install integration: {e}")
+            # Show troubleshooting tips
+            tips = integration.get_troubleshooting_tips()
+            if tips:
+                print("\n Troubleshooting tips:")
+                for tip in tips:
+                    print(f"  • {tip}")
 
     def uninstall_shell_integration(self, shell: str = "bash") -> None:
         """Uninstall shell integration.
@@ -482,56 +470,52 @@ end
         Args:
             shell: Target shell type (bash, zsh, fish)
         """
-        from pathlib import Path
+        from typing import Dict, Type, Union
+
+        from .integration import Bash, Fish, Zsh
 
         print("  Uninstalling AIxTerm shell integration...")
 
-        shell_configs = {
-            "bash": [".bashrc", ".bash_profile"],
-            "zsh": [".zshrc"],
-            "fish": [".config/fish/config.fish"],
+        # Get the appropriate integration class
+        integration_classes: Dict[str, Type[Union[Bash, Zsh, Fish]]] = {
+            "bash": Bash,
+            "zsh": Zsh,
+            "fish": Fish,
         }
 
-        if shell not in shell_configs:
+        if shell not in integration_classes:
             print(f"Error: Unsupported shell: {shell}")
+            print(f"Supported shells: {', '.join(integration_classes.keys())}")
             return
 
-        home = Path.home()
-        integration_marker = "# AIxTerm Shell Integration"
+        integration_class = integration_classes[shell]
+        integration = integration_class()
 
-        for config_name in shell_configs[shell]:
-            config_file = home / config_name
-            if not config_file.exists():
-                continue
+        # Check if shell is available
+        if not integration.is_available():
+            print(f"Warning: {shell} is not available on this system")
+            print("Attempting to uninstall anyway...")
 
-            try:
-                content = config_file.read_text()
-                if integration_marker not in content:
-                    continue
+        # Uninstall the integration
+        if integration.uninstall():
+            print(f" Shell integration for {shell} uninstalled successfully!")
 
-                # Remove integration section
-                lines = content.split("\n")
-                filtered_lines = []
-                skip = False
-                for line in lines:
-                    if integration_marker in line:
-                        skip = True
-                    elif (
-                        skip
-                        and line.strip() == ""
-                        and not line.startswith("#")
-                        and not line.startswith(" ")
-                    ):
-                        skip = False
-                    if not skip:
-                        filtered_lines.append(line)
+            # Show any additional cleanup notes
+            config_files = integration.config_files
+            print(f" Cleaned integration from config files: {', '.join(config_files)}")
 
-                # Write back cleaned content
-                config_file.write_text("\n".join(filtered_lines))
-                print(f" Removed integration from: {config_file}")
+            print("\n You may need to:")
+            print("  • Restart your terminal or run 'source ~/.{shell}rc'")
+            print("  • Remove any remaining ~/.aixterm_log.* files if desired")
+        else:
+            print(f"Error: Failed to uninstall {shell} integration")
 
-            except Exception as e:
-                print(f"Error: Failed to remove integration from {config_file}: {e}")
+            # Show troubleshooting tips
+            tips = integration.get_troubleshooting_tips()
+            if tips:
+                print("\n Troubleshooting tips:")
+                for tip in tips:
+                    print(f"  • {tip}")
 
 
 def main() -> None:
@@ -547,6 +531,9 @@ Examples:
   ai --plan 'create a backup system for my database'
   ai --file config.py --file main.py 'how can I improve this code?'
   ai --api_url http://127.0.0.1:8080/v1/chat/completions 'help with docker'
+  ai --log-level DEBUG 'analyze this error'  # Enable debug logging
+  ai -c                               # Clear session context
+  ai --clear                          # Clear session context
   ai --server                         # Run in server mode
   ai --init-config                    # Create default config
   ai --init-config --force            # Overwrite existing config
@@ -559,6 +546,12 @@ Examples:
     parser.add_argument("--status", action="store_true", help="Show AIxTerm status")
     parser.add_argument("--tools", action="store_true", help="List available MCP tools")
     parser.add_argument("--cleanup", action="store_true", help="Force cleanup now")
+    parser.add_argument(
+        "-c",
+        "--clear",
+        action="store_true",
+        help="Clear context for the active session",
+    )
     parser.add_argument("--server", action="store_true", help="Run in server mode")
     parser.add_argument(
         "--init-config",
@@ -591,6 +584,12 @@ Examples:
     parser.add_argument("--config", help="Path to configuration file")
     parser.add_argument("--api_url", help="Override API URL")
     parser.add_argument("--api_key", help="Override API key")
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        default="WARNING",
+        help="Set logging level (default: WARNING)",
+    )
 
     # Planning flag
     parser.add_argument(
@@ -602,6 +601,7 @@ Examples:
 
     # File context option
     parser.add_argument(
+        "-f",
         "--file",
         action="append",
         dest="files",
@@ -645,6 +645,25 @@ Examples:
 
     app = AIxTerm(config_path=args.config)
 
+    # Configure logging level from CLI argument
+    import logging
+
+    log_level = getattr(args, "log_level", "WARNING")
+
+    # Configure logging for all aixterm modules
+    aixterm_logger = logging.getLogger("aixterm")
+
+    # Set the level for aixterm logger and propagate to children
+    aixterm_logger.setLevel(getattr(logging, log_level))
+
+    # Ensure all existing handlers in the hierarchy respect the new level
+    for logger_name in logging.Logger.manager.loggerDict:
+        if logger_name.startswith("aixterm"):
+            logger = logging.getLogger(logger_name)
+            logger.setLevel(getattr(logging, log_level))
+            for handler in logger.handlers:
+                handler.setLevel(getattr(logging, log_level))
+
     # Apply configuration overrides if provided
     if args.api_url:
         app.config.set("api_url", args.api_url)
@@ -658,6 +677,8 @@ Examples:
             app.list_tools()
         elif args.cleanup:
             app.cleanup_now()
+        elif args.clear:
+            app.clear_context()
         elif args.install_shell:
             app.install_shell_integration(args.shell)
         elif args.uninstall_shell:
@@ -669,8 +690,6 @@ Examples:
             server = AIxTermServer(app.config)
             server.start()
         elif args.query:
-            # Regular query with optional file context and planning in CLI mode
-            # Use CLI mode to automatically manage MCP server lifecycle
             query = " ".join(args.query)
             file_contexts = args.files or []
             app.run_cli_mode(query, file_contexts, use_planning=args.plan)

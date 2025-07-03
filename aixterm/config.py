@@ -66,10 +66,6 @@ class AIxTermConfig:
                 "transport": "http",  # Transport protocol (http, websocket)
                 "keep_alive": True,  # Keep server running after requests
             },
-            "logging": {
-                "level": "INFO",
-                "file": None,
-            },  # None means no file logging
         }
 
     def _validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:

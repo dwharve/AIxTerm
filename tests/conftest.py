@@ -87,7 +87,7 @@ This will show all running processes with detailed information."""
 @pytest.fixture
 def mock_requests_post():
     """Mock requests.post for LLM API calls."""
-    with patch("aixterm.llm.requests.post") as mock_post:
+    with patch("aixterm.llm.client.requests.post") as mock_post:
         # Mock streaming response
         mock_response = Mock()
         mock_response.raise_for_status.return_value = None

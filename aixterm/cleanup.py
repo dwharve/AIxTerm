@@ -87,6 +87,9 @@ class CleanupManager:
     def _cleanup_log_files(self) -> Dict[str, Any]:
         """Clean up old and excessive log files.
 
+        Only removes log files from inactive TTY sessions to avoid
+        interfering with currently active terminal sessions.
+
         Returns:
             Dictionary with cleanup results
         """
@@ -94,6 +97,7 @@ class CleanupManager:
             "log_files_cleaned": 0,
             "log_files_removed": 0,
             "bytes_freed": 0,
+            "active_sessions_preserved": 0,
         }
 
         log_files = self._get_log_files()
@@ -101,9 +105,24 @@ class CleanupManager:
         max_files = self.config.get("cleanup.max_log_files", 10)
 
         cutoff_date = datetime.now() - timedelta(days=max_age_days)
+        active_ttys = self._get_active_ttys()
 
-        # Remove files older than max_age_days
+        # Separate active and inactive log files
+        active_logs = []
+        inactive_logs = []
+
         for log_file in log_files:
+            tty_name = self._extract_tty_from_log_path(log_file)
+            if tty_name and self._is_tty_active(tty_name, active_ttys):
+                active_logs.append(log_file)
+            else:
+                inactive_logs.append(log_file)
+
+        results["active_sessions_preserved"] = len(active_logs)
+
+        # Only clean up inactive log files
+        # Remove files older than max_age_days
+        for log_file in inactive_logs:
             try:
                 file_time = datetime.fromtimestamp(log_file.stat().st_mtime)
                 if file_time < cutoff_date:
@@ -111,18 +130,19 @@ class CleanupManager:
                     log_file.unlink()
                     results["log_files_removed"] += 1
                     results["bytes_freed"] += file_size
-                    self.logger.debug(f"Removed old log file: {log_file}")
+                    self.logger.debug(f"Removed old inactive log file: {log_file}")
             except Exception as e:
                 error_msg = f"Error removing old log file {log_file}: {e}"
                 self.logger.error(error_msg)
                 results.setdefault("errors", []).append(error_msg)
 
-        # If still too many files, remove oldest ones
-        remaining_files = [f for f in log_files if f.exists()]
-        if len(remaining_files) > max_files:
+        # If still too many inactive files, remove oldest ones
+        # (Never remove active session logs regardless of count)
+        remaining_inactive = [f for f in inactive_logs if f.exists()]
+        if len(remaining_inactive) > max_files:
             # Sort by modification time (oldest first)
-            remaining_files.sort(key=lambda f: f.stat().st_mtime)
-            files_to_remove = remaining_files[:-max_files]
+            remaining_inactive.sort(key=lambda f: f.stat().st_mtime)
+            files_to_remove = remaining_inactive[:-max_files]
 
             for log_file in files_to_remove:
                 try:
@@ -130,22 +150,27 @@ class CleanupManager:
                     log_file.unlink()
                     results["log_files_removed"] += 1
                     results["bytes_freed"] += file_size
-                    self.logger.debug(f"Removed excess log file: {log_file}")
+                    self.logger.debug(f"Removed excess inactive log file: {log_file}")
                 except Exception as e:
                     error_msg = f"Error removing excess log file {log_file}: {e}"
                     self.logger.error(error_msg)
                     results.setdefault("errors", []).append(error_msg)
 
-        # Truncate large log files
-        for log_file in remaining_files:
-            if log_file.exists():
-                try:
-                    if self._truncate_large_log_file(log_file):
-                        results["log_files_cleaned"] += 1
-                except Exception as e:
-                    error_msg = f"Error truncating log file {log_file}: {e}"
-                    self.logger.error(error_msg)
-                    results.setdefault("errors", []).append(error_msg)
+        # Truncate large log files (both active and inactive,
+        # but be more conservative with active)
+        all_remaining = [f for f in log_files if f.exists()]
+        for log_file in all_remaining:
+            try:
+                tty_name = self._extract_tty_from_log_path(log_file)
+                is_active = tty_name and self._is_tty_active(tty_name, active_ttys)
+                # Use larger size limit for active sessions
+                max_size = 20 if is_active else 10  # MB
+                if self._truncate_large_log_file(log_file, max_size):
+                    results["log_files_cleaned"] += 1
+            except Exception as e:
+                error_msg = f"Error truncating log file {log_file}: {e}"
+                self.logger.error(error_msg)
+                results.setdefault("errors", []).append(error_msg)
 
         return results
 
@@ -227,6 +252,62 @@ class CleanupManager:
             List of log file paths
         """
         return list(Path.home().glob(".aixterm_log.*"))
+
+    def _get_active_ttys(self) -> List[str]:
+        """Get list of currently active TTY sessions.
+
+        Returns:
+            List of active TTY names
+        """
+        active_ttys = []
+        try:
+            import subprocess
+
+            # Use 'who' command to get active TTYs
+            result = subprocess.run(["who"], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                for line in result.stdout.strip().split("\n"):
+                    if line.strip():
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            tty_name = parts[1]
+                            # Normalize TTY name (remove /dev/ prefix, replace / with -)
+                            normalized_tty = tty_name.replace("/dev/", "").replace(
+                                "/", "-"
+                            )
+                            active_ttys.append(normalized_tty)
+        except Exception as e:
+            self.logger.warning(f"Could not determine active TTYs: {e}")
+
+        self.logger.debug(f"Active TTYs detected: {active_ttys}")
+        return active_ttys
+
+    def _extract_tty_from_log_path(self, log_path: Path) -> Optional[str]:
+        """Extract TTY name from log file path.
+
+        Args:
+            log_path: Path to log file
+
+        Returns:
+            TTY name or None if not a TTY-based log
+        """
+        filename = log_path.name
+        if filename.startswith(".aixterm_log."):
+            tty_name = filename[13:]  # Remove ".aixterm_log." prefix
+            return tty_name if tty_name != "default" else None
+        return None
+
+    def _is_tty_active(self, tty_name: str, active_ttys: List[str]) -> bool:
+        """Check if a TTY is currently active.
+
+        Args:
+            tty_name: TTY name to check
+            active_ttys: List of active TTY names
+
+        Returns:
+            True if TTY is active
+        """
+        return tty_name in active_ttys
 
     def get_cleanup_status(self) -> Dict[str, Any]:
         """Get cleanup status and statistics.
