@@ -169,8 +169,9 @@ class TestTerminalContext:
         """Test getting current log file with TTY."""
         # Test TTY functionality on Unix systems, or mock it on Windows
         if hasattr(os, "ttyname"):
-            with patch("os.ttyname", return_value="/dev/pts/1"), patch.object(
-                sys.stdin, "fileno", return_value=0
+            with (
+                patch("os.ttyname", return_value="/dev/pts/1"),
+                patch.object(sys.stdin, "fileno", return_value=0),
             ):
                 log_path = context_manager.log_processor._get_current_log_file()
                 assert log_path == mock_home_dir / ".aixterm_log.pts-1"

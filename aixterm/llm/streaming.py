@@ -1,7 +1,7 @@
 """Streaming response handling for LLM requests."""
 
 import json
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 import requests
 
@@ -9,27 +9,51 @@ import requests
 class StreamingHandler:
     """Handles streaming responses from LLM APIs."""
 
-    def __init__(self, config_manager: Any, logger: Any):
+    def __init__(self, config_manager: Any, logger: Any, progress_display_manager: Any = None):
         """Initialize streaming handler.
 
         Args:
             config_manager: Configuration manager instance
             logger: Logger instance
+            progress_display_manager: Progress display manager for clearing displays
         """
         self.config = config_manager
         self.logger = logger
+        self.progress_display_manager = progress_display_manager
+        self._streaming_started = False
 
-    def handle_streaming_response(self, response: requests.Response) -> str:
+    def _clear_progress_displays_for_streaming(self) -> None:
+        """Clear all active progress displays before streaming starts."""
+        if self.progress_display_manager and not self._streaming_started:
+            try:
+                # Clear all active progress displays using the new method
+                self.progress_display_manager.clear_all_displays()
+                
+                # Clear the entire line and move to beginning for clean output
+                import sys
+                sys.stderr.write("\r\033[2K")  # Clear entire line
+                sys.stderr.flush()
+                
+            except Exception as e:
+                self.logger.debug(f"Error clearing progress displays: {e}")
+            
+            self._streaming_started = True
+
+    def handle_streaming_response(
+        self, response: requests.Response, silent: bool = False
+    ) -> str:
         """Handle streaming response from LLM.
 
         Args:
             response: Streaming response object
+            silent: If True, collect response without printing (for progress bar
+                coordination)
 
         Returns:
-            Complete response text
+            Full response text
         """
         full_response = ""
-        # print("\n--- AI Response ---")
+        first_content = True
 
         try:
             for line in response.iter_lines():
@@ -57,12 +81,19 @@ class StreamingHandler:
                                 function_name = tool_call.get("function", {}).get(
                                     "name", "unknown"
                                 )
-                                print(f"[Tool Call: {function_name}]")
+                                if not silent:
+                                    print(f"[Tool Call: {function_name}]")
                                 self.handle_tool_call(tool_call)
 
                         content = delta.get("content", "")
                         if content:
-                            print(content, end="", flush=True)
+                            # Clear progress displays before first content
+                            if first_content and not silent:
+                                self._clear_progress_displays_for_streaming()
+                                first_content = False
+                            
+                            if not silent:
+                                print(content, end="", flush=True)
                             full_response += content
 
                     except json.JSONDecodeError:
@@ -72,7 +103,8 @@ class StreamingHandler:
         except Exception as e:
             self.logger.error(f"Error processing streaming response: {e}")
 
-        print()  # New line after streaming
+        if not silent and full_response:
+            print()  # New line after streaming
         return full_response
 
     def handle_tool_call(self, tool_call: Dict[str, Any]) -> None:
@@ -91,16 +123,22 @@ class StreamingHandler:
         self,
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
+        silent: bool = False,
     ) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
         """Handle streaming response that may include tool calls.
 
         Args:
             messages: List of message dictionaries
             tools: Optional list of tools
+            silent: If True, collect response without printing (for progress bar
+                coordination)
 
         Returns:
             Tuple of (response_text, tool_calls)
         """
+        # Reset streaming state for this request
+        self._streaming_started = False
+        
         # Make streaming request
         headers = {
             "Content-Type": "application/json",
@@ -130,19 +168,21 @@ class StreamingHandler:
             )
             response.raise_for_status()
 
-            return self.parse_streaming_response_with_tools(response)
+            return self.parse_streaming_response_with_tools(response, silent)
 
         except requests.exceptions.RequestException as e:
             self.logger.error(f"Streaming LLM request failed: {e}")
             return "", None
 
     def parse_streaming_response_with_tools(
-        self, response: requests.Response
+        self, response: requests.Response, silent: bool = False
     ) -> Tuple[str, Optional[List[Dict[str, Any]]]]:
         """Parse streaming response and extract content and tool calls.
 
         Args:
             response: Streaming response object
+            silent: If True, collect response without printing (for progress bar
+                coordination)
 
         Returns:
             Tuple of (response_text, tool_calls)
@@ -150,6 +190,7 @@ class StreamingHandler:
         full_response = ""
         tool_calls: List[Dict[str, Any]] = []
         current_tool_calls: Dict[int, Dict[str, Any]] = {}
+        first_content = True
 
         try:
             for line in response.iter_lines():
@@ -171,7 +212,13 @@ class StreamingHandler:
                         # Handle content
                         content = delta.get("content", "")
                         if content:
-                            print(content, end="", flush=True)
+                            # Clear progress displays before first content
+                            if first_content and not silent:
+                                self._clear_progress_displays_for_streaming()
+                                first_content = False
+                            
+                            if not silent:
+                                print(content, end="", flush=True)
                             full_response += content
 
                         # Handle tool calls
@@ -220,8 +267,8 @@ class StreamingHandler:
                 if tc.get("id") and tc.get("function", {}).get("name")
             ]
 
-        # Only add newline if we actually streamed content
-        if full_response:
+        # Only add newline if we actually streamed content and not silent
+        if full_response and not silent:
             print()  # New line after streaming
 
         return full_response, tool_calls if tool_calls else None

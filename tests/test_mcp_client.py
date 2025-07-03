@@ -1,6 +1,5 @@
 """Tests for MCP client functionality."""
 
-import subprocess
 import time
 from unittest.mock import Mock, patch
 
@@ -144,7 +143,7 @@ class TestMCPClient:
         """Test getting server status."""
         mock_server = Mock()
         mock_server.is_running.return_value = True
-        mock_server.get_pid.return_value = 12345
+        mock_server.get_pid.return_value = None  # SDK doesn't expose PID
         mock_server.get_uptime.return_value = 60.0
         mock_server.list_tools.return_value = [{"name": "tool1"}]
 
@@ -155,7 +154,7 @@ class TestMCPClient:
         expected = {
             "test-server": {
                 "running": True,
-                "pid": 12345,
+                "pid": None,  # SDK doesn't expose PID
                 "uptime": 60.0,
                 "tool_count": 1,
             }
@@ -177,158 +176,161 @@ class TestMCPServer:
         }
 
     @pytest.fixture
-    def mock_client(self):
-        """Create mock MCP client."""
+    def mock_logger(self):
+        """Create mock logger."""
         return Mock()
 
-    def test_server_initialization(self, config, mock_client):
+    @pytest.fixture
+    def mock_loop(self):
+        """Create mock event loop."""
+        loop = Mock()
+        loop.is_running.return_value = True
+        return loop
+
+    def test_server_initialization(self, config, mock_logger, mock_loop):
         """Test server initialization."""
-        server = MCPServer(config, Mock(), mock_client)
+        server = MCPServer(config, mock_logger, mock_loop)
 
         assert server.config == config
-        assert server.mcp_client == mock_client
-        assert server.process is None
+        assert server.logger == mock_logger
+        assert server.loop == mock_loop
+        assert server._session is None
         assert not server._initialized
 
-    @patch("subprocess.Popen")
-    def test_start_server(self, mock_popen, config, mock_client):
+    @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
+    def test_start_server(self, mock_run_coro, config, mock_logger, mock_loop):
         """Test starting server."""
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_popen.return_value = mock_process
+        mock_future = Mock()
+        mock_future.result.return_value = None
+        mock_run_coro.return_value = mock_future
 
-        server = MCPServer(config, Mock(), mock_client)
+        server = MCPServer(config, mock_logger, mock_loop)
+        server.start()
 
-        with patch.object(server, "initialize_mcp_session"):
-            server.start()
-
-        assert server.process == mock_process
         assert server._initialized
+        assert server.start_time is not None
+        mock_run_coro.assert_called_once()
 
-    @patch("subprocess.Popen")
-    def test_start_server_failure(self, mock_popen, config, mock_client):
+    @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
+    def test_start_server_failure(self, mock_run_coro, config, mock_logger, mock_loop):
         """Test server start failure."""
-        mock_process = Mock()
-        mock_process.poll.return_value = 1  # Exit code 1
-        mock_process.stderr.read.return_value = "Error message"
-        mock_popen.return_value = mock_process
+        mock_future = Mock()
+        mock_future.result.side_effect = Exception("Start failed")
+        mock_run_coro.return_value = mock_future
 
-        server = MCPServer(config, Mock(), mock_client)
+        server = MCPServer(config, mock_logger, mock_loop)
 
-        with pytest.raises(MCPError):
+        with pytest.raises(MCPError, match="Failed to start MCP server"):
             server.start()
 
-    def test_stop_server(self, config, mock_client):
+    def test_stop_server(self, config, mock_logger, mock_loop):
         """Test stopping server."""
-        server = MCPServer(config, Mock(), mock_client)
-        mock_process = Mock()
-        server.process = mock_process
+        server = MCPServer(config, mock_logger, mock_loop)
         server._initialized = True
+        server._session = Mock()
 
-        server.stop()
+        with patch(
+            "aixterm.mcp_client.asyncio.run_coroutine_threadsafe"
+        ) as mock_run_coro:
+            mock_future = Mock()
+            mock_future.result.return_value = None
+            mock_run_coro.return_value = mock_future
 
-        mock_process.terminate.assert_called_once()
-        assert server.process is None
-        assert not server._initialized
+            server.stop()
 
-    def test_stop_server_force_kill(self, config, mock_client):
-        """Test force killing server on timeout."""
-        server = MCPServer(config, Mock(), mock_client)
-        mock_process = Mock()
-        mock_process.wait.side_effect = [subprocess.TimeoutExpired("cmd", 5), None]
-        server.process = mock_process
+            assert not server._initialized
+            assert server._session is None
 
-        server.stop()
-
-        mock_process.terminate.assert_called_once()
-        mock_process.kill.assert_called_once()
-
-    def test_is_running(self, config, mock_client):
-        """Test checking if server is running."""
-        server = MCPServer(config, Mock(), mock_client)
+    def test_is_running(self, config, mock_logger, mock_loop):
+        """Test is_running status."""
+        server = MCPServer(config, mock_logger, mock_loop)
 
         # Not running initially
         assert not server.is_running()
 
-        # Running with process
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        server.process = mock_process
+        # Running when initialized and has session
+        server._initialized = True
+        server._session = Mock()
         assert server.is_running()
 
-        # Not running when process exited
-        mock_process.poll.return_value = 0
+        # Not running if no session
+        server._session = None
         assert not server.is_running()
 
-    def test_send_request(self, config, mock_client):
-        """Test sending request to server."""
-        server = MCPServer(config, Mock(), mock_client)
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.stdout.readline.return_value = '{"result": "test"}'
-        # Mock stdout to have a fileno that works with select
-        mock_process.stdout.fileno.return_value = 1
-        server.process = mock_process
+    def test_get_pid(self, config, mock_logger, mock_loop):
+        """Test get_pid (always returns None with SDK)."""
+        server = MCPServer(config, mock_logger, mock_loop)
+        assert server.get_pid() is None
 
-        with patch("json.loads", return_value={"result": "test"}):
-            with patch("select.select", return_value=([mock_process.stdout], [], [])):
-                result = server.send_request("test/method", {"param": "value"})
+    def test_get_uptime(self, config, mock_logger, mock_loop):
+        """Test get_uptime."""
+        server = MCPServer(config, mock_logger, mock_loop)
 
-        assert result == "test"
-        mock_process.stdin.write.assert_called_once()
+        # No uptime when not started
+        assert server.get_uptime() is None
 
-    def test_send_request_server_error(self, config, mock_client):
-        """Test handling server error response."""
-        server = MCPServer(config, Mock(), mock_client)
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.stdout.readline.return_value = '{"error": "test error"}'
-        server.process = mock_process
+        # Has uptime when started
+        server.start_time = time.time() - 60
+        uptime = server.get_uptime()
+        assert uptime is not None
+        assert uptime > 59  # Should be around 60 seconds
 
-        with patch("json.loads", return_value={"error": "test error"}):
-            with pytest.raises(MCPError):
-                server.send_request("test/method")
-
-    def test_list_tools(self, config, mock_client):
+    @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
+    def test_list_tools(self, mock_run_coro, config, mock_logger, mock_loop):
         """Test listing tools."""
-        server = MCPServer(config, Mock(), mock_client)
+        server = MCPServer(config, mock_logger, mock_loop)
+        server._initialized = True
+        server._session = Mock()
 
-        mock_tools_response = {
-            "tools": [
-                {
-                    "name": "test_tool",
-                    "description": "A test tool",
-                    "inputSchema": {"type": "object"},
-                }
-            ]
-        }
+        # Mock the async result
+        mock_tool = Mock()
+        mock_tool.name = "test_tool"
+        mock_tool.description = "Test tool"
+        mock_tool.inputSchema = {"type": "object"}
 
-        with patch.object(server, "send_request", return_value=mock_tools_response):
-            tools = server.list_tools()
+        mock_result = Mock()
+        mock_result.tools = [mock_tool]
+
+        mock_future = Mock()
+        mock_future.result.return_value = mock_result
+        mock_run_coro.return_value = mock_future
+
+        tools = server.list_tools()
 
         assert len(tools) == 1
         assert tools[0]["type"] == "function"
         assert tools[0]["function"]["name"] == "test_tool"
 
-    def test_call_tool(self, config, mock_client):
+    def test_list_tools_not_running(self, config, mock_logger, mock_loop):
+        """Test listing tools when server not running."""
+        server = MCPServer(config, mock_logger, mock_loop)
+
+        with pytest.raises(MCPError, match="Server is not running"):
+            server.list_tools()
+
+    @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
+    def test_call_tool(self, mock_run_coro, config, mock_logger, mock_loop):
         """Test calling a tool."""
-        server = MCPServer(config, Mock(), mock_client)
-        expected_result = {"content": [{"type": "text", "text": "result"}]}
+        server = MCPServer(config, mock_logger, mock_loop)
+        server._initialized = True
+        server._session = Mock()
 
-        with patch.object(server, "send_request", return_value=expected_result):
-            result = server.call_tool("test_tool", {"arg": "value"})
+        # Mock the async result
+        mock_result = Mock()
+        mock_result.content = [Mock(text="Tool result")]
 
-        assert result == expected_result
+        mock_future = Mock()
+        mock_future.result.return_value = mock_result
+        mock_run_coro.return_value = mock_future
 
-    def test_get_uptime(self, config, mock_client):
-        """Test getting server uptime."""
-        server = MCPServer(config, Mock(), mock_client)
+        result = server.call_tool("test_tool", {"arg": "value"})
 
-        # No uptime when not started
-        assert server.get_uptime() is None
+        assert result == "Tool result"
+        mock_run_coro.assert_called_once()
 
-        # Uptime when started
-        server.start_time = time.time() - 30
-        uptime = server.get_uptime()
-        assert uptime is not None
-        assert uptime >= 29  # Allow some variance
+    def test_call_tool_not_running(self, config, mock_logger, mock_loop):
+        """Test calling tool when server not running."""
+        server = MCPServer(config, mock_logger, mock_loop)
+
+        with pytest.raises(MCPError, match="Server is not running"):
+            server.call_tool("test_tool", {})

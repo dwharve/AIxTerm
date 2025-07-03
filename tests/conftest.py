@@ -119,12 +119,6 @@ def context_manager(mock_config):
 
 
 @pytest.fixture
-def llm_client(mock_config):
-    """Create an LLMClient instance with mock config."""
-    return LLMClient(mock_config)
-
-
-@pytest.fixture
 def mcp_client(mock_config):
     """Create an MCPClient instance with mock config."""
     return MCPClient(mock_config)
@@ -134,3 +128,9 @@ def mcp_client(mock_config):
 def cleanup_manager(mock_config):
     """Create a CleanupManager instance with mock config."""
     return CleanupManager(mock_config)
+
+
+@pytest.fixture
+def llm_client(mock_config, mcp_client):
+    """Create an LLMClient instance with mock config and mcp client."""
+    return LLMClient(mock_config, mcp_client)

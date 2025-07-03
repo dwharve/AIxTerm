@@ -3,13 +3,13 @@
 import signal
 import sys
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, Callable, List, Optional
 
 from .cleanup import CleanupManager
 from .config import AIxTermConfig
 from .context import TerminalContext
 from .llm import LLMClient, LLMError
-from .mcp_client import MCPClient, ProgressParams
+from .mcp_client import MCPClient
 from .progress_display import create_progress_display
 from .utils import get_logger
 
@@ -33,7 +33,12 @@ class AIxTerm:
         # Initialize components
         self.context_manager = TerminalContext(self.config)
         self.mcp_client = MCPClient(self.config)
-        self.llm_client = LLMClient(self.config, self.mcp_client)
+        self.llm_client = LLMClient(
+            self.config, 
+            self.mcp_client, 
+            self._create_progress_callback_factory(),
+            self.progress_display
+        )
         self.cleanup_manager = CleanupManager(self.config)
 
         # Set up signal handlers for graceful shutdown
@@ -131,18 +136,22 @@ class AIxTerm:
                 progress_token="llm_processing",
                 title="Processing with AI",
                 total=None,
-                show_immediately=True,
+                show_immediately=False,
             )
 
             try:
-                # Send query to LLM
+                # Send query to LLM with normal streaming
                 response = self.llm_client.ask_with_context(
                     query, context, tools, use_planning=use_planning
                 )
 
-                llm_progress.complete("AI processing completed")
+                # Only complete progress if it was actually shown
+                if llm_progress.is_visible:
+                    llm_progress.complete("AI processing completed")
             except Exception:
-                llm_progress.complete("AI processing failed")
+                # Only complete progress if it was actually shown
+                if llm_progress.is_visible:
+                    llm_progress.complete("AI processing failed")
                 raise
 
             if not response.strip():
@@ -196,39 +205,70 @@ class AIxTerm:
         # Log the interaction for context
         self.context_manager.create_log_entry(f"ai '{original_query}'", response)
 
-    def _create_progress_callback(
-        self, progress_token: str, title: str = "Processing"
-    ) -> None:
-        """Create a progress callback for MCP tool calls.
+    def _create_progress_callback_factory(self) -> Callable[[str, str], Callable]:
+        """Create a progress callback factory for MCP tool calls.
 
-        Args:
-            progress_token: Progress token for this operation
-            title: Title to display for the progress
+        Returns:
+            A factory function that creates progress callbacks
         """
 
-        def progress_callback(params: ProgressParams) -> None:
-            """Handle progress updates from MCP tools."""
-            try:
-                # Update or create progress display
-                self.progress_display.update_progress(
-                    progress_token=params.progress_token,
-                    progress=params.progress,
-                    message=params.message,
-                    total=params.total,
-                )
-            except Exception as e:
-                self.logger.debug(f"Error updating progress display: {e}")
+        def factory(progress_token: str, title: str) -> Callable:
+            """Factory function to create progress callbacks.
 
-        # Register the callback with MCP client
-        self.mcp_client.register_progress_callback(progress_token, progress_callback)
+            Args:
+                progress_token: Progress token for this operation
+                title: Title to display for the progress
 
-        # Create initial progress display
-        self.progress_display.create_progress(
-            progress_token=progress_token,
-            title=title,
-            total=None,  # Will be set when first update arrives
-            show_immediately=True,
-        )
+            Returns:
+                Progress callback function
+            """
+            # Create progress display
+            progress_display = self.progress_display.create_progress(
+                progress_token=progress_token,
+                title=title,
+                total=None,
+                show_immediately=True,
+            )
+
+            def progress_callback(params: Any) -> None:
+                """Handle progress updates from MCP tools."""
+                try:
+                    from .mcp_client import ProgressParams
+
+                    if isinstance(params, ProgressParams):
+                        # Try to update progress display, but don't let failures prevent completion  # noqa: E501
+                        update_success = True
+                        try:
+                            progress_display.update(
+                                progress=params.progress,
+                                message=params.message,
+                                total=params.total,
+                            )
+                        except Exception:
+                            update_success = False
+
+                    else:
+                        # Handle raw parameters
+                        progress_display.update(
+                            progress=getattr(params, "progress", 0),
+                            message=getattr(params, "message", None),
+                            total=getattr(params, "total", None),
+                        )
+                except Exception as e:
+                    # If there's any error and we have completion-like parameters, try to complete anyway  # noqa: E501
+                    try:
+                        if hasattr(params, "progress") and hasattr(params, "total"):
+                            if getattr(params, "progress", 0) >= 100:
+                                progress_display.complete("")
+                    except Exception:
+                        pass
+                    self.logger.debug(f"Error updating progress display: {e}")
+
+            return progress_callback
+
+        return factory
+
+
 
     def list_tools(self) -> None:
         """List available MCP tools."""
@@ -324,7 +364,9 @@ class AIxTerm:
                 )
             else:
                 print("ℹ No active session context found to clear")
-                print("  This may be a new session or context was already empty")
+                print(
+                    "  This may be a new session or context was already empty"[:85]
+                )  # noqa: E501
         except Exception as e:
             self.logger.error(f"Error clearing context: {e}")
             print(f"✗ Failed to clear context: {e}")
@@ -351,7 +393,10 @@ class AIxTerm:
 
         if config_path.exists() and not force:
             print(f"Configuration file already exists at: {config_path}")
-            print("Use --init-config --force to overwrite the existing configuration.")
+            print(
+                "Use --init-config --force to overwrite the existing "
+                "configuration."  # noqa: E501
+            )
             return
 
         success = self.config.create_default_config(overwrite=force)
@@ -624,7 +669,10 @@ Examples:
 
         if config_path.exists() and not force:
             print(f"Configuration file already exists at: {config_path}")
-            print("Use --init-config --force to overwrite the existing configuration.")
+            print(
+                "Use --init-config --force to overwrite the existing "
+                + "configuration."
+            )
             sys.exit(1)
 
         success = config.create_default_config(overwrite=force)

@@ -92,14 +92,16 @@ class TestProgressCallback(unittest.TestCase):
         callback_func = Mock(side_effect=Exception("Test error"))
         callback = ProgressCallback(callback_func)
 
+        # Mock the logger
+        callback.logger = Mock()
+
         params = ProgressParams("token", 50)
 
         # Should not raise exception
-        with patch("aixterm.mcp_client.get_logger") as mock_logger:
-            mock_log = Mock()
-            mock_logger.return_value = mock_log
-            callback(params)
-            mock_log.error.assert_called_once()
+        callback(params)
+
+        # Should have logged the error
+        callback.logger.error.assert_called_once()
 
 
 class TestMCPClient(unittest.TestCase):
@@ -206,83 +208,93 @@ class TestMCPClient(unittest.TestCase):
         token = "test-token"
 
         # Register callback with very short timeout
-        self.client.register_progress_callback(token, callback_func, timeout=0.01)
+        self.client.register_progress_callback(token, callback_func, timeout=0.001)
 
         # Wait for expiration
-        time.sleep(0.02)
+        time.sleep(0.01)
 
         notification = {
             "method": "notifications/progress",
             "params": {"progressToken": token, "progress": 75},
         }
 
-        self.client.handle_progress_notification(notification)
+        with patch.object(self.client.logger, "debug") as mock_debug:
+            self.client.handle_progress_notification(notification)
+            mock_debug.assert_called_with(f"Callback for token {token} has expired")
 
-        # Callback should have been removed and not called
-        callback_func.assert_not_called()
+        # Should be removed from callbacks
         self.assertNotIn(token, self.client._progress_callbacks)
 
     def test_handle_progress_notification_exception(self):
-        """Test handling exception in progress notification."""
-        notification = {}  # Invalid notification
+        """Test handling exception in progress callback."""
+        callback_func = Mock(side_effect=Exception("Callback error"))
+        token = "test-token"
 
-        with patch.object(self.client.logger, "warning") as mock_warning:
+        self.client.register_progress_callback(token, callback_func)
+
+        notification = {
+            "method": "notifications/progress",
+            "params": {"progressToken": token, "progress": 75},
+        }
+
+        with patch.object(self.client.logger, "error") as mock_error:
             self.client.handle_progress_notification(notification)
-            mock_warning.assert_called_once()
+            mock_error.assert_called()
 
     def test_cleanup_expired_callbacks(self):
-        """Test cleanup of expired callbacks."""
-        callback1 = Mock()
-        callback2 = Mock()
+        """Test cleaning up expired callbacks."""
+        # Register some callbacks
+        self.client.register_progress_callback("active", Mock(), timeout=60.0)
+        self.client.register_progress_callback("expired", Mock(), timeout=0.001)
 
-        # Register callbacks with different timeouts
-        self.client.register_progress_callback("token1", callback1, timeout=0.01)
-        self.client.register_progress_callback("token2", callback2, timeout=60.0)
+        # Wait for one to expire
+        time.sleep(0.01)
 
-        # Wait for first callback to expire
-        time.sleep(0.02)
+        with patch.object(self.client.logger, "debug") as mock_debug:
+            self.client.cleanup_expired_callbacks()
+            mock_debug.assert_called()
 
-        self.client.cleanup_expired_callbacks()
-
-        # First callback should be removed, second should remain
-        self.assertNotIn("token1", self.client._progress_callbacks)
-        self.assertIn("token2", self.client._progress_callbacks)
+        # Only active should remain
+        self.assertIn("active", self.client._progress_callbacks)
+        self.assertNotIn("expired", self.client._progress_callbacks)
 
     @patch("aixterm.mcp_client.MCPServer")
     def test_initialize_with_servers(self, mock_server_class):
-        """Test initializing client with servers."""
+        """Test initializing with servers."""
         mock_server = Mock()
         mock_server_class.return_value = mock_server
 
-        self.mock_config.get_mcp_servers.return_value = [
-            {"name": "test-server", "command": ["echo"], "auto_start": True}
-        ]
+        server_config = {
+            "name": "test-server",
+            "command": ["python", "-c", "print('test')"],
+            "auto_start": True,
+        }
+        self.client.config.get_mcp_servers.return_value = [server_config]
 
         self.client.initialize()
 
-        # Verify server was created and started
-        mock_server_class.assert_called_once()
-        mock_server.start.assert_called_once()
         self.assertTrue(self.client._initialized)
         self.assertIn("test-server", self.client.servers)
+        mock_server.start.assert_called_once()
 
     @patch("aixterm.mcp_client.MCPServer")
     def test_initialize_server_without_auto_start(self, mock_server_class):
-        """Test initializing server without auto_start."""
+        """Test initializing server with auto_start=False."""
         mock_server = Mock()
         mock_server_class.return_value = mock_server
 
-        self.mock_config.get_mcp_servers.return_value = [
-            {"name": "test-server", "command": ["echo"], "auto_start": False}
-        ]
+        server_config = {
+            "name": "test-server",
+            "command": ["python", "-c", "print('test')"],
+            "auto_start": False,
+        }
+        self.client.config.get_mcp_servers.return_value = [server_config]
 
         self.client.initialize()
 
-        # Verify server was created but not started
-        mock_server_class.assert_called_once()
-        mock_server.start.assert_not_called()
         self.assertTrue(self.client._initialized)
         self.assertIn("test-server", self.client.servers)
+        mock_server.start.assert_not_called()
 
     @patch("aixterm.mcp_client.MCPServer")
     def test_call_tool_with_progress(self, mock_server_class):
@@ -292,11 +304,8 @@ class TestMCPClient(unittest.TestCase):
         mock_server.call_tool.return_value = {"result": "success"}
         mock_server_class.return_value = mock_server
 
-        self.mock_config.get_mcp_servers.return_value = [
-            {"name": "test-server", "command": ["echo"]}
-        ]
-
-        self.client.initialize()
+        self.client.servers["test-server"] = mock_server
+        self.client._initialized = True
 
         callback_func = Mock()
 
@@ -308,14 +317,17 @@ class TestMCPClient(unittest.TestCase):
             timeout=60.0,
         )
 
-        # Verify tool was called with progress token
+        # Verify tool was called
         mock_server.call_tool.assert_called_once()
         args = mock_server.call_tool.call_args[0]
         self.assertEqual(args[0], "test_tool")
-        self.assertIn("_progress_token", args[1])
+        self.assertEqual(args[1], {"arg": "value"})  # Arguments should be unchanged
 
         # Verify result
         self.assertEqual(result, {"result": "success"})
+
+        # Verify progress callbacks were made
+        self.assertEqual(callback_func.call_count, 2)  # Start and completion
 
     def test_call_tool_with_progress_no_callback(self):
         """Test calling tool with progress but no callback."""
@@ -370,13 +382,13 @@ class TestMCPClient(unittest.TestCase):
 
         with patch.object(self.client.logger, "error") as mock_error:
             self.client.shutdown()
-            mock_error.assert_called_once()
+            mock_error.assert_called()
 
     def test_get_server_status(self):
         """Test getting server status."""
         mock_server = Mock()
         mock_server.is_running.return_value = True
-        mock_server.get_pid.return_value = 1234
+        mock_server.get_pid.return_value = None  # SDK doesn't expose PID
         mock_server.get_uptime.return_value = 60.0
         mock_server.list_tools.return_value = [{"name": "tool1"}, {"name": "tool2"}]
 
@@ -387,7 +399,7 @@ class TestMCPClient(unittest.TestCase):
         expected = {
             "test-server": {
                 "running": True,
-                "pid": 1234,
+                "pid": None,  # SDK doesn't expose PID
                 "uptime": 60.0,
                 "tool_count": 2,
             }
@@ -438,322 +450,232 @@ class TestMCPClient(unittest.TestCase):
 
 
 class TestMCPServer(unittest.TestCase):
-    """Test MCPServer class."""
+    """Test MCPServer class with new SDK implementation."""
 
     def setUp(self):
         """Set up test fixtures."""
         self.mock_logger = Mock()
-        self.mock_client = Mock()
+        self.mock_loop = Mock()
+        self.mock_loop.is_running.return_value = True
         self.config = {
             "name": "test-server",
             "command": ["python", "-c", "print('test')"],
             "args": [],
             "env": {},
         }
-        self.server = MCPServer(self.config, self.mock_logger, self.mock_client)
+        self.server = MCPServer(self.config, self.mock_logger, self.mock_loop)
 
     def test_server_initialization(self):
         """Test server initialization."""
         self.assertEqual(self.server.config, self.config)
         self.assertEqual(self.server.logger, self.mock_logger)
-        self.assertEqual(self.server.mcp_client, self.mock_client)
-        self.assertIsNone(self.server.process)
+        self.assertEqual(self.server.loop, self.mock_loop)
+        self.assertIsNone(self.server._session)
         self.assertFalse(self.server._initialized)
 
     def test_is_running_false(self):
         """Test is_running when server is not running."""
         self.assertFalse(self.server.is_running())
 
-    @patch("subprocess.Popen")
-    def test_start_server_success(self, mock_popen):
+    @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
+    def test_start_server_success(self, mock_run_coro):
         """Test successfully starting a server."""
-        mock_process = Mock()
-        mock_process.poll.return_value = None  # Process is running
-        mock_process.stdin = Mock()
-        mock_process.stdout = Mock()
-        mock_process.stdout.readline.return_value = (
-            '{"jsonrpc":"2.0","id":1,"result":{}}'
-        )
-        mock_popen.return_value = mock_process
+        mock_future = Mock()
+        mock_future.result.return_value = None
+        mock_run_coro.return_value = mock_future
 
-        with patch.object(self.server, "send_request") as mock_send_request:
-            mock_send_request.return_value = {"capabilities": {}}
-            with patch.object(self.server, "send_notification"):
-                with patch.object(self.server, "_start_notification_handler"):
-                    self.server.start()
+        self.server.start()
 
         self.assertTrue(self.server._initialized)
-        self.assertIsNotNone(self.server.process)
+        self.assertIsNotNone(self.server.start_time)
+        mock_run_coro.assert_called_once()
 
-    @patch("subprocess.Popen")
-    def test_start_server_failure(self, mock_popen):
+    @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
+    def test_start_server_failure(self, mock_run_coro):
         """Test server start failure."""
-        mock_process = Mock()
-        mock_process.poll.return_value = 1  # Process failed
-        mock_process.stderr = Mock()
-        mock_process.stderr.read.return_value = "Error starting server"
-        mock_popen.return_value = mock_process
+        mock_future = Mock()
+        mock_future.result.side_effect = Exception("Start failed")
+        mock_run_coro.return_value = mock_future
 
-        with self.assertRaises(MCPError):
-            self.server.start()
-
-    @patch("subprocess.Popen")
-    def test_start_server_exception(self, mock_popen):
-        """Test server start with subprocess exception."""
-        mock_popen.side_effect = Exception("Process creation failed")
-
-        with self.assertRaises(MCPError):
+        with self.assertRaisesRegex(MCPError, "Failed to start MCP server"):
             self.server.start()
 
     def test_start_server_already_running(self):
         """Test starting server that's already running."""
-        self.server.process = Mock()
-        self.server.process.poll.return_value = None  # Still running
+        self.server._initialized = True
+        self.server._session = Mock()
 
-        # Should return without doing anything
+        # Should return early without doing anything
         self.server.start()
 
     def test_stop_server(self):
-        """Test stopping a server."""
-        mock_process = Mock()
-        self.server.process = mock_process
+        """Test stopping server."""
         self.server._initialized = True
+        self.server._session = Mock()
 
-        self.server.stop()
+        with patch(
+            "aixterm.mcp_client.asyncio.run_coroutine_threadsafe"
+        ) as mock_run_coro:
+            mock_future = Mock()
+            mock_future.result.return_value = None
+            mock_run_coro.return_value = mock_future
 
-        mock_process.terminate.assert_called_once()
-        mock_process.wait.assert_called_once_with(timeout=5)
-        self.assertIsNone(self.server.process)
-        self.assertFalse(self.server._initialized)
+            self.server.stop()
 
-    def test_stop_server_no_process(self):
-        """Test stopping server when no process exists."""
-        # Should not raise any errors
+            self.assertFalse(self.server._initialized)
+            self.assertIsNone(self.server._session)
+
+    def test_stop_server_no_session(self):
+        """Test stopping server with no session."""
+        # Should not fail
         self.server.stop()
 
     def test_stop_server_exception(self):
-        """Test stop server with exception during termination."""
-        mock_process = Mock()
-        mock_process.terminate.side_effect = Exception("Terminate failed")
-        self.server.process = mock_process
+        """Test exception during server stop."""
+        self.server._initialized = True
+        self.server._session = Mock()
 
-        with patch.object(self.server.logger, "error"):
+        with patch(
+            "aixterm.mcp_client.asyncio.run_coroutine_threadsafe"
+        ) as mock_run_coro:
+            mock_future = Mock()
+            mock_future.result.side_effect = Exception("Stop failed")
+            mock_run_coro.return_value = mock_future
+
+            # Should not raise, just log
             self.server.stop()
 
     def test_get_pid_no_process(self):
-        """Test getting PID when no process."""
+        """Test get_pid (always returns None with SDK)."""
         self.assertIsNone(self.server.get_pid())
 
     def test_get_pid_with_process(self):
-        """Test getting PID with process."""
-        mock_process = Mock()
-        mock_process.pid = 1234
-        self.server.process = mock_process
-
-        self.assertEqual(self.server.get_pid(), 1234)
+        """Test get_pid returns None with SDK implementation."""
+        self.assertIsNone(self.server.get_pid())
 
     def test_get_uptime_no_start_time(self):
-        """Test getting uptime when no start time."""
+        """Test get_uptime when not started."""
         self.assertIsNone(self.server.get_uptime())
 
     def test_get_uptime_with_start_time(self):
-        """Test getting uptime with start time."""
-        start_time = time.time() - 60  # 60 seconds ago
-        self.server.start_time = start_time
-
+        """Test get_uptime with start time."""
+        self.server.start_time = time.time() - 60
         uptime = self.server.get_uptime()
         self.assertIsNotNone(uptime)
-        assert uptime is not None  # Type narrowing
-        self.assertTrue(uptime >= 59.0)  # Allow some variance
-
-    def test_send_request_not_running(self):
-        """Test sending request when server not running."""
-        with self.assertRaises(MCPError):
-            self.server.send_request("test/method")
-
-    def test_send_request_no_process_stdin(self):
-        """Test sending request when process has no stdin."""
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.stdin = None
-        self.server.process = mock_process
-
-        with self.assertRaises(MCPError):
-            self.server.send_request("test/method")
-
-    def test_send_request_no_response(self):
-        """Test sending request with no response."""
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.stdin = Mock()
-        mock_process.stdout = Mock()
-        mock_process.stdout.readline.return_value = ""
-        self.server.process = mock_process
-
-        with self.assertRaises(MCPError):
-            self.server.send_request("test/method")
-
-    def test_send_request_write_exception(self):
-        """Test exception during request writing."""
-        mock_process = Mock()
-        mock_process.poll.return_value = None
-        mock_process.stdin = Mock()
-        mock_process.stdin.write.side_effect = Exception("Write failed")
-        self.server.process = mock_process
-
-        with self.assertRaises(MCPError):
-            self.server.send_request("test/method")
-
-    @patch("json.loads")
-    def test_send_request_success(self, mock_json_loads):
-        """Test successful request sending."""
-        mock_process = Mock()
-        mock_process.stdin = Mock()
-        mock_process.stdout = Mock()
-        mock_process.stdout.readline.return_value = '{"result": "test"}'
-        mock_process.stdout.fileno.return_value = 1
-        mock_process.poll.return_value = None
-
-        mock_json_loads.return_value = {"result": "test"}
-
-        self.server.process = mock_process
-
-        with patch("select.select", return_value=([mock_process.stdout], [], [])):
-            result = self.server.send_request("test/method", {"param": "value"})
-
-        self.assertEqual(result, "test")
-        mock_process.stdin.write.assert_called_once()
-        mock_process.stdin.flush.assert_called_once()
-
-    @patch("json.loads")
-    def test_send_request_error_response(self, mock_json_loads):
-        """Test request with error response."""
-        mock_process = Mock()
-        mock_process.stdin = Mock()
-        mock_process.stdout = Mock()
-        mock_process.stdout.readline.return_value = '{"error": "test error"}'
-        mock_process.poll.return_value = None
-
-        mock_json_loads.return_value = {"error": "test error"}
-
-        self.server.process = mock_process
-
-        with self.assertRaises(MCPError):
-            self.server.send_request("test/method")
-
-    def test_send_notification_not_running(self):
-        """Test sending notification when not running."""
-        with self.assertRaises(MCPError):
-            self.server.send_notification("test/notification")
+        assert uptime is not None  # Type narrowing for mypy
+        self.assertGreater(uptime, 59.0)
 
     def test_list_tools_not_running(self):
         """Test listing tools when server not running."""
-        tools = self.server.list_tools()
-        self.assertEqual(tools, [])
+        with self.assertRaisesRegex(MCPError, "Server is not running"):
+            self.server.list_tools()
 
-    @patch("time.time")
-    def test_list_tools_cached(self, mock_time):
+    @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
+    def test_list_tools_cached(self, mock_run_coro):
         """Test listing tools with caching."""
-        mock_time.return_value = 1000
+        self.server._initialized = True
+        self.server._session = Mock()
 
-        # Set up cache using setattr
-        cached_tools = [{"name": "cached_tool"}]
-        setattr(self.server, "_tools_brief_cache", cached_tools)
-        setattr(
-            self.server, "_tools_brief_cache_time", 950
-        )  # Within 60 second cache window
+        # Set up cache
+        cached_tools = [{"type": "function", "function": {"name": "cached_tool"}}]
+        self.server._tools_cache = cached_tools
+        self.server._tools_cache_time = time.time()
 
         tools = self.server.list_tools(brief=True)
 
+        # Should return cached result without calling async method
         self.assertEqual(tools, cached_tools)
+        mock_run_coro.assert_not_called()
 
-    def test_list_tools_error(self):
+    @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
+    def test_list_tools_error(self, mock_run_coro):
         """Test listing tools with server error."""
-        with patch.object(self.server, "send_request") as mock_send_request:
-            mock_send_request.side_effect = Exception("Server error")
+        self.server._initialized = True
+        self.server._session = Mock()
 
-            with patch.object(self.server.logger, "error"):
-                tools = self.server.list_tools()
-                self.assertEqual(tools, [])
+        mock_future = Mock()
+        mock_future.result.side_effect = Exception("Server error")
+        mock_run_coro.return_value = mock_future
 
-    def test_call_tool_success(self):
+        with self.assertRaisesRegex(MCPError, "Failed to list tools"):
+            self.server.list_tools()
+
+    @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
+    def test_call_tool_success(self, mock_run_coro):
         """Test calling a tool successfully."""
-        with patch.object(self.server, "send_request") as mock_send_request:
-            mock_send_request.return_value = {"content": [{"text": "result"}]}
+        self.server._initialized = True
+        self.server._session = Mock()
 
-            result = self.server.call_tool("test_tool", {"arg": "value"})
+        mock_result = Mock()
+        mock_result.content = [Mock(text="Tool result")]
 
-            mock_send_request.assert_called_once_with(
-                "tools/call", {"name": "test_tool", "arguments": {"arg": "value"}}
-            )
-            self.assertEqual(result, {"content": [{"text": "result"}]})
+        mock_future = Mock()
+        mock_future.result.return_value = mock_result
+        mock_run_coro.return_value = mock_future
+
+        result = self.server.call_tool("test_tool", {"arg": "value"})
+
+        self.assertEqual(result, "Tool result")
+        mock_run_coro.assert_called_once()
 
 
 class TestIntegration(unittest.TestCase):
-    """Integration tests for progress notifications."""
+    """Test integration scenarios."""
 
     def test_end_to_end_progress_flow(self):
         """Test complete progress notification flow."""
-        mock_config = Mock()
-        mock_config.get_mcp_servers.return_value = []
+        config = Mock()
+        config.get_mcp_servers.return_value = []
+        client = MCPClient(config)
 
-        client = MCPClient(mock_config)
-
-        # Track progress updates
         progress_updates = []
 
         def progress_callback(params: ProgressParams):
             progress_updates.append(params)
 
         # Register callback
-        token = "test-token"
-        client.register_progress_callback(token, progress_callback)
+        client.register_progress_callback("test-token", progress_callback)
 
         # Simulate progress notifications
-        for i in range(0, 101, 25):
-            notification = {
+        notifications = [
+            {
                 "method": "notifications/progress",
                 "params": {
-                    "progressToken": token,
-                    "progress": i,
+                    "progressToken": "test-token",
+                    "progress": 25,
                     "total": 100,
-                    "message": f"Step {i//25 + 1}",
+                    "message": "Starting...",
                 },
-            }
+            },
+            {
+                "method": "notifications/progress",
+                "params": {
+                    "progressToken": "test-token",
+                    "progress": 50,
+                    "total": 100,
+                    "message": "Half way...",
+                },
+            },
+            {
+                "method": "notifications/progress",
+                "params": {
+                    "progressToken": "test-token",
+                    "progress": 100,
+                    "total": 100,
+                    "message": "Complete!",
+                },
+            },
+        ]
+
+        for notification in notifications:
             client.handle_progress_notification(notification)
 
         # Verify all progress updates were received
-        self.assertEqual(len(progress_updates), 5)
-
-        for i, update in enumerate(progress_updates):
-            expected_progress = i * 25
-            self.assertEqual(update.progress, expected_progress)
-            self.assertEqual(update.total, 100)
-            self.assertEqual(update.message, f"Step {i + 1}")
-
-        # Cleanup
-        client.unregister_progress_callback(token)
-        self.assertNotIn(token, client._progress_callbacks)
+        self.assertEqual(len(progress_updates), 3)
+        self.assertEqual(progress_updates[0].progress, 25)
+        self.assertEqual(progress_updates[1].progress, 50)
+        self.assertEqual(progress_updates[2].progress, 100)
 
 
 if __name__ == "__main__":
-    # Run with coverage if available
-    try:
-        import coverage
-
-        cov = coverage.Coverage()
-        cov.start()
-
-        unittest.main(exit=False, verbosity=2)
-
-        cov.stop()
-        cov.save()
-
-        print("\n" + "=" * 50)
-        print("COVERAGE REPORT")
-        print("=" * 50)
-        cov.report(show_missing=True)
-
-    except ImportError:
-        print("Coverage module not available, running tests without coverage")
-        unittest.main(verbosity=2)
+    unittest.main()

@@ -1,7 +1,7 @@
 """LLM client for communicating with language models."""
 
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import requests
 
@@ -16,15 +16,25 @@ from .tools import ToolHandler
 class LLMClient:
     """Client for communicating with OpenAI-compatible LLM APIs."""
 
-    def __init__(self, config_manager: Any, mcp_client: Any = None) -> None:
+    def __init__(
+        self,
+        config_manager: Any,
+        mcp_client: Any,
+        progress_callback_factory: Optional[Callable] = None,
+        progress_display_manager: Any = None,
+    ):
         """Initialize LLM client.
 
         Args:
-            config_manager: AIxTermConfig instance
-            mcp_client: MCP client instance for tool execution
+            config_manager: Configuration manager instance
+            mcp_client: MCP client instance for tool calls
+            progress_callback_factory: Optional factory for creating progress callbacks
+            progress_display_manager: Progress display manager for clearing displays
         """
         self.config = config_manager
         self.mcp_client = mcp_client
+        self.progress_callback_factory = progress_callback_factory
+        self.progress_display_manager = progress_display_manager
         self.logger = get_logger(__name__)
 
         # Initialize helper components
@@ -33,14 +43,19 @@ class LLMClient:
             config_manager, self.logger, self.token_manager
         )
         self.message_validator = MessageValidator(config_manager, self.logger)
-        self.streaming_handler = StreamingHandler(config_manager, self.logger)
+        self.streaming_handler = StreamingHandler(
+            config_manager, self.logger, progress_display_manager
+        )
         self.tool_handler = ToolHandler(config_manager, mcp_client, self.logger)
+        
+
 
     def chat_completion(
         self,
         messages: List[Dict[str, str]],
         stream: bool = True,
         tools: Optional[List[Dict[str, Any]]] = None,
+        silent: bool = False,
     ) -> str:
         """Send chat completion request to LLM.
 
@@ -48,21 +63,23 @@ class LLMClient:
             messages: List of message dictionaries
             stream: Whether to stream the response
             tools: Optional list of tools for the LLM
+            silent: If True, collect response without printing during streaming
 
         Returns:
             Complete response text
         """
         # If tools are provided and MCP client is available, use conversation flow
         if tools and self.mcp_client:
-            return self._chat_completion_with_tools(messages, tools, stream)
+            return self._chat_completion_with_tools(messages, tools, stream, silent)
         else:
-            return self._basic_chat_completion(messages, stream, tools)
+            return self._basic_chat_completion(messages, stream, tools, silent)
 
     def _basic_chat_completion(
         self,
         messages: List[Dict[str, str]],
         stream: bool = True,
         tools: Optional[List[Dict[str, Any]]] = None,
+        silent: bool = False,
     ) -> str:
         """Basic chat completion without tool execution.
 
@@ -70,6 +87,7 @@ class LLMClient:
             messages: List of message dictionaries
             stream: Whether to stream the response
             tools: Optional list of tools for the LLM
+            silent: If True, collect response without printing during streaming
 
         Returns:
             Complete response text
@@ -112,7 +130,9 @@ class LLMClient:
             response.raise_for_status()
 
             if stream:
-                return self.streaming_handler.handle_streaming_response(response)
+                return self.streaming_handler.handle_streaming_response(
+                    response, silent
+                )
             else:
                 data = response.json()
                 content: str = data["choices"][0]["message"]["content"]
@@ -227,6 +247,7 @@ class LLMClient:
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         stream: bool = True,
+        silent: bool = False,
     ) -> str:
         """Handle chat completion with tool execution capability.
 
@@ -234,6 +255,7 @@ class LLMClient:
             messages: List of message dictionaries
             tools: List of available tools
             stream: Whether to stream the response
+            silent: If True, collect response without printing during streaming
 
         Returns:
             Complete response text including tool results
@@ -267,7 +289,7 @@ class LLMClient:
                 # Handle streaming response with tools
                 response_text, tool_calls = (
                     self.streaming_handler.handle_streaming_with_tools(
-                        conversation_messages, current_tools
+                        conversation_messages, current_tools, silent
                     )
                 )
 
@@ -296,6 +318,7 @@ class LLMClient:
                         tools,
                         iteration,
                         max_context_size,
+                        self.progress_callback_factory,
                     )
                     continue
                 else:
@@ -355,6 +378,7 @@ class LLMClient:
                         tools,
                         iteration,
                         max_context_size,
+                        self.progress_callback_factory,
                     )
                     continue
                 else:

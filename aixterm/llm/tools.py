@@ -74,6 +74,7 @@ class ToolHandler:
         tools: List[Dict[str, Any]],
         iteration: int,
         max_context_size: int,
+        progress_callback_factory: Optional[Callable[[str, str], Callable]] = None,
     ) -> None:
         """Process tool calls and add results to conversation.
 
@@ -83,6 +84,8 @@ class ToolHandler:
             tools: Available tools
             iteration: Current iteration number
             max_context_size: Maximum context size in tokens
+            progress_callback_factory: Optional factory function to create
+                progress callbacks
         """
         # Import here to avoid circular imports
         from ..context import TokenManager
@@ -96,7 +99,16 @@ class ToolHandler:
             function_name = function.get("name", "")
 
             self.logger.info(f"Executing tool: {function_name}")
-            self.logger.info(f"[Tool Call: {function_name}]")
+
+            # Create progress callback if factory provided
+            progress_callback = None
+            if progress_callback_factory:
+                try:
+                    progress_callback = progress_callback_factory(
+                        f"tool_{tool_call_id}", f"Executing {function_name}"
+                    )
+                except Exception as e:
+                    self.logger.debug(f"Failed to create progress callback: {e}")
 
             # Execute the tool
             try:
@@ -104,6 +116,7 @@ class ToolHandler:
                     function_name,
                     function.get("arguments", "{}"),
                     tools,
+                    progress_callback,
                 )
 
                 # Debug: log the raw tool result to understand its format
