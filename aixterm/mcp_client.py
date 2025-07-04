@@ -288,8 +288,29 @@ class MCPClient:
             self.register_progress_callback(progress_token, progress_callback, timeout)
 
         try:
+            # Send start progress if callback provided
+            if progress_callback:
+                start_params = ProgressParams(
+                    progress_token=progress_token,
+                    progress=0,
+                    total=100,
+                    message=f"Starting {tool_name}...",
+                )
+                progress_callback(start_params)
+
             # Call tool - server will send progress notifications
             result = self.call_tool(tool_name, server_name, arguments)
+
+            # Send completion progress if callback provided
+            if progress_callback:
+                completion_params = ProgressParams(
+                    progress_token=progress_token,
+                    progress=100,
+                    total=100,
+                    message=f"Completed {tool_name}",
+                )
+                progress_callback(completion_params)
+
             return result
 
         except Exception as e:
@@ -425,6 +446,7 @@ class MCPServer:
 
         # Store the current task to ensure cleanup happens in the same context
         import weakref
+
         self._init_task = weakref.ref(asyncio.current_task())
 
         try:
@@ -436,10 +458,10 @@ class MCPServer:
 
             # Initialize the connection
             await self._session.initialize()
-            
+
             # Start notification listener
             self._start_notification_listener()
-        except Exception as e:
+        except Exception:
             # Ensure proper cleanup on initialization failure
             await self._cleanup_session_safely()
             raise
@@ -448,7 +470,7 @@ class MCPServer:
         """Start listening for notifications from the server."""
         if self._session is None:
             return
-        
+
         # Start a task to listen for notifications
         self._notification_task = asyncio.create_task(self._listen_for_notifications())
 
@@ -456,15 +478,14 @@ class MCPServer:
         """Listen for notifications from the server."""
         if self._session is None:
             return
-        
+
         try:
             # Create a simple notification listener
             # This is a simplified implementation - in practice, you'd want to
             # integrate with the MCP SDK's notification system
             while True:
                 # Check if we have a parent client to route notifications to
-                if hasattr(self.logger, 'parent_client'):
-                    parent_client = self.logger.parent_client
+                if hasattr(self.logger, "parent_client"):
                     # This is where we would process incoming notifications
                     # For now, just sleep to prevent busy waiting
                     await asyncio.sleep(0.1)
@@ -513,21 +534,24 @@ class MCPServer:
         # Note: We need to be careful about context manager cleanup.
         # The safest approach is to let the context managers clean up themselves
         # and just set our references to None.
-        
+
         try:
-            # Just clear our references - let the context managers handle their own cleanup
-            # when they go out of scope or when the event loop shuts down
+            # Just clear our references - let the context managers handle
+            # their own cleanup when they go out of scope or when the event
+            # loop shuts down
             if self._session:
-                # Don't explicitly call __aexit__ as it may be in a different task context
+                # Don't explicitly call __aexit__ as it may be in a different task
+                # context
                 self._session = None
-                
+
             if self._client_context:
-                # Don't explicitly call __aexit__ as it may be in a different task context  
+                # Don't explicitly call __aexit__ as it may be in a different task
+                # context
                 self._client_context = None
-                
+
         except Exception as e:
             self.logger.debug(f"Error during session cleanup: {e}")
-            
+
         # Note: The actual cleanup will happen when the context managers
         # are garbage collected or when the event loop shuts down
 
@@ -536,9 +560,11 @@ class MCPServer:
         try:
             # Check if we're in the same task that initialized the session
             current_task = asyncio.current_task()
-            if (self._init_task and 
-                self._init_task() is not None and 
-                self._init_task() == current_task):
+            if (
+                self._init_task
+                and self._init_task() is not None
+                and self._init_task() == current_task
+            ):
                 # We're in the same task context, safe to call __aexit__
                 if self._session:
                     try:
@@ -547,7 +573,7 @@ class MCPServer:
                         self.logger.debug(f"Session cleanup error: {e}")
                     finally:
                         self._session = None
-                
+
                 if self._client_context:
                     try:
                         await self._client_context.__aexit__(None, None, None)
@@ -559,7 +585,7 @@ class MCPServer:
                 # Different task context, just clear references
                 self._session = None
                 self._client_context = None
-                
+
         except Exception as e:
             self.logger.debug(f"Error during safe session cleanup: {e}")
             # Fallback: just clear references

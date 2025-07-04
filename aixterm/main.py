@@ -34,10 +34,10 @@ class AIxTerm:
         self.context_manager = TerminalContext(self.config)
         self.mcp_client = MCPClient(self.config)
         self.llm_client = LLMClient(
-            self.config, 
-            self.mcp_client, 
+            self.config,
+            self.mcp_client,
             self._create_progress_callback_factory(),
-            self.progress_display
+            self.progress_display,
         )
         self.cleanup_manager = CleanupManager(self.config)
 
@@ -237,7 +237,6 @@ class AIxTerm:
 
                     if isinstance(params, ProgressParams):
                         # Try to update progress display, but don't let failures prevent completion  # noqa: E501
-                        update_success = True
                         try:
                             progress_display.update(
                                 progress=params.progress,
@@ -245,7 +244,7 @@ class AIxTerm:
                                 total=params.total,
                             )
                         except Exception:
-                            update_success = False
+                            pass
 
                     else:
                         # Handle raw parameters
@@ -267,8 +266,6 @@ class AIxTerm:
             return progress_callback
 
         return factory
-
-
 
     def list_tools(self) -> None:
         """List available MCP tools."""

@@ -47,8 +47,6 @@ class LLMClient:
             config_manager, self.logger, progress_display_manager
         )
         self.tool_handler = ToolHandler(config_manager, mcp_client, self.logger)
-        
-
 
     def chat_completion(
         self,

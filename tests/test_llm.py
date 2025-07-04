@@ -201,13 +201,21 @@ class TestLLMClient:
         context = "Test context"
         tools = [{"type": "function", "function": {"name": "test_tool"}}]
 
-        with patch("builtins.print"):
-            llm_client.ask_with_context(query, context, tools)
+        # Temporarily disable MCP client to test basic tool handling
+        original_mcp_client = llm_client.mcp_client
+        llm_client.mcp_client = None
 
-        call_args = mock_requests_post.call_args
-        payload = call_args[1]["json"]
-        assert "tools" in payload
-        assert payload["tools"] == tools
+        try:
+            with patch("builtins.print"):
+                llm_client.ask_with_context(query, context, tools)
+
+            call_args = mock_requests_post.call_args
+            payload = call_args[1]["json"]
+            assert "tools" in payload
+            assert payload["tools"] == tools
+        finally:
+            # Restore the original MCP client
+            llm_client.mcp_client = original_mcp_client
 
     def test_authorization_header(self, llm_client):
         """Test that authorization header is included when API key is set."""

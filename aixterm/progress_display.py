@@ -81,7 +81,9 @@ class ProgressDisplay:
                         display = self._active_displays[token]
                         display.complete("")  # Clear with empty message
                     except Exception as e:
-                        self.logger.debug(f"Error clearing existing progress display {token}: {e}")
+                        self.logger.debug(
+                            f"Error clearing existing progress display {token}: {e}"
+                        )
                     finally:
                         if token in self._active_displays:
                             del self._active_displays[token]
@@ -185,13 +187,14 @@ class ProgressDisplay:
 
     def clear_all_displays(self) -> None:
         """Clear all active progress displays by completing them with empty messages.
-        
-        This is used when something else needs to write to the terminal (like streaming output).
+
+        This is used when something else needs to write to the terminal
+        (like streaming output).
         """
         with self._lock:
             if self._shutdown:
                 return
-                
+
             # Complete all active displays with empty messages to clear them
             active_tokens = list(self._active_displays.keys())
             for token in active_tokens:
@@ -388,7 +391,8 @@ class TqdmProgress(ProgressInterface):
         with self._tqdm_lock:
             if self._tqdm is not None:
                 try:
-                    # For empty final messages, clear immediately (this is for cleanup before streaming)
+                    # For empty final messages, clear immediately
+                    # (this is for cleanup before streaming)
                     if final_message is not None and not final_message.strip():
                         # Clear and close immediately without showing completion
                         self._tqdm.clear()
@@ -406,20 +410,29 @@ class TqdmProgress(ProgressInterface):
 
                         # Set final description
                         if final_message:
-                            self._tqdm.set_description(f"{self.title} - {final_message}")
+                            self._tqdm.set_description(
+                                f"{self.title} - {final_message}"
+                            )
                         else:
                             self._tqdm.set_description(f"{self.title} - completed")
-                        
+
                         # Refresh to show the final state
                         self._tqdm.refresh()
-                        
-                        # Close without leaving a newline - this is key to prevent the line spacing issue
+
+                        # Close without leaving a newline - this is key to prevent
+                        # the line spacing issue
                         self._tqdm.leave = False
                         self._tqdm.close()
-                        
+
                         # Now write the final progress line manually without a newline
-                        final_desc = self._tqdm.desc if hasattr(self._tqdm, 'desc') else (
-                            f"{self.title} - {final_message}" if final_message else f"{self.title} - completed"
+                        final_desc = (
+                            self._tqdm.desc
+                            if hasattr(self._tqdm, "desc")
+                            else (
+                                f"{self.title} - {final_message}"
+                                if final_message
+                                else f"{self.title} - completed"
+                            )
                         )
                         sys.stderr.write(f"\r{final_desc}")
                         sys.stderr.flush()

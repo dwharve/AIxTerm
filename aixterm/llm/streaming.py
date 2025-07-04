@@ -1,7 +1,7 @@
 """Streaming response handling for LLM requests."""
 
 import json
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
@@ -9,7 +9,9 @@ import requests
 class StreamingHandler:
     """Handles streaming responses from LLM APIs."""
 
-    def __init__(self, config_manager: Any, logger: Any, progress_display_manager: Any = None):
+    def __init__(
+        self, config_manager: Any, logger: Any, progress_display_manager: Any = None
+    ):
         """Initialize streaming handler.
 
         Args:
@@ -28,15 +30,16 @@ class StreamingHandler:
             try:
                 # Clear all active progress displays using the new method
                 self.progress_display_manager.clear_all_displays()
-                
+
                 # Clear the entire line and move to beginning for clean output
                 import sys
+
                 sys.stderr.write("\r\033[2K")  # Clear entire line
                 sys.stderr.flush()
-                
+
             except Exception as e:
                 self.logger.debug(f"Error clearing progress displays: {e}")
-            
+
             self._streaming_started = True
 
     def handle_streaming_response(
@@ -91,7 +94,7 @@ class StreamingHandler:
                             if first_content and not silent:
                                 self._clear_progress_displays_for_streaming()
                                 first_content = False
-                            
+
                             if not silent:
                                 print(content, end="", flush=True)
                             full_response += content
@@ -138,7 +141,7 @@ class StreamingHandler:
         """
         # Reset streaming state for this request
         self._streaming_started = False
-        
+
         # Make streaming request
         headers = {
             "Content-Type": "application/json",
@@ -216,7 +219,7 @@ class StreamingHandler:
                             if first_content and not silent:
                                 self._clear_progress_displays_for_streaming()
                                 first_content = False
-                            
+
                             if not silent:
                                 print(content, end="", flush=True)
                             full_response += content
