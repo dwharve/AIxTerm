@@ -4,6 +4,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from .utils import get_logger
+
 
 class AIxTermConfig:
     """Manages AIxTerm configuration with validation and MCP server support."""
@@ -20,6 +22,8 @@ class AIxTermConfig:
             self.config_path: Path = config_path
         else:
             self.config_path = self.DEFAULT_CONFIG_PATH
+        self.logger = get_logger(__name__)
+        self._timing_initialized: bool = False
         self._config = self._load_config()
 
     def _get_default_config(self) -> Dict[str, Any]:
@@ -47,8 +51,8 @@ class AIxTermConfig:
             ),
             "api_url": "http://localhost/v1/chat/completions",
             "api_key": "",
-            "context_size": 4000,  # Total context window size available
-            "response_buffer_size": 1000,  # Space reserved for LLM response
+            "context_size": 4096,  # Total context window size available
+            "response_buffer_size": 1024,  # Space reserved for LLM response
             "mcp_servers": [],
             "cleanup": {
                 "enabled": True,
@@ -57,7 +61,29 @@ class AIxTermConfig:
                 "cleanup_interval_hours": 24,
             },
             "tool_management": {
-                "reserve_tokens_for_tools": 2000,  # Reserve tokens for tool definitions
+                "reserve_tokens_for_tools": 1024,  # Reserve tokens for tool definitions
+                "max_tool_iterations": 5,  # Max iterations for tool execution loops
+                "response_timing": {
+                    "average_response_time": 10.0,  # Average API response time
+                    "max_progress_time": 30.0,  # Max time to show progress before hung
+                    "progress_update_interval": 0.5,  # Progress update freq in seconds
+                },
+                "tool_priorities": {
+                    # Essential execution tools (priority: 1000+)
+                    "execute_command": 1000,
+                    # Tool introspection and discovery (priority: 900+)
+                    "search_tools": 950,
+                    "describe_tool": 900,
+                    # File operations (priority: 800+)
+                    "read_file": 850,
+                    "write_file": 840,
+                    "find_files": 820,
+                    "search_files": 810,
+                    "delete_file": 800,
+                    # Web and network tools (priority: 600+)
+                    "web_search": 650,
+                    "http_client": 600,
+                },
             },
             "server_mode": {
                 "enabled": False,  # Run as server instead of exiting immediately
@@ -89,22 +115,31 @@ class AIxTermConfig:
         # Validate context_size
         try:
             config["context_size"] = max(
-                1000, min(32000, int(config.get("context_size", 4000)))
+                1000,
+                min(32000, int(config.get("context_size", defaults["context_size"]))),
             )
         except (ValueError, TypeError):
-            config["context_size"] = defaults.get("context_size", 4000)
+            config["context_size"] = defaults["context_size"]
 
         # Validate response_buffer_size
         try:
             config["response_buffer_size"] = max(
-                100, min(4000, int(config.get("response_buffer_size", 1000)))
+                100,
+                min(
+                    4000,
+                    int(
+                        config.get(
+                            "response_buffer_size", defaults["response_buffer_size"]
+                        )
+                    ),
+                ),
             )
         except (ValueError, TypeError):
-            config["response_buffer_size"] = defaults.get("response_buffer_size", 1000)
+            config["response_buffer_size"] = defaults["response_buffer_size"]
 
         # Ensure response buffer doesn't exceed total context size
         if config["response_buffer_size"] >= config["context_size"]:
-            config["response_buffer_size"] = min(1000, config["context_size"] // 2)
+            config["response_buffer_size"] = min(1024, config["context_size"] // 2)
 
         # Validate api_url - convert to string if not string
         if not isinstance(config.get("api_url"), str) or not config.get("api_url"):
@@ -185,6 +220,77 @@ class AIxTermConfig:
                 tool_mgmt["reserve_tokens_for_tools"] = defaults_tool_mgmt[
                     "reserve_tokens_for_tools"
                 ]
+
+            # Validate max_tool_iterations
+            try:
+                tool_mgmt["max_tool_iterations"] = max(
+                    1,
+                    min(
+                        20,
+                        int(tool_mgmt.get("max_tool_iterations", 5)),
+                    ),
+                )
+            except (ValueError, TypeError):
+                tool_mgmt["max_tool_iterations"] = defaults_tool_mgmt[
+                    "max_tool_iterations"
+                ]
+
+            # Validate response_timing
+            if not isinstance(tool_mgmt.get("response_timing"), dict):
+                tool_mgmt["response_timing"] = defaults_tool_mgmt["response_timing"]
+            else:
+                timing = tool_mgmt["response_timing"]
+                defaults_timing = defaults_tool_mgmt["response_timing"]
+
+                # Validate average_response_time
+                try:
+                    timing["average_response_time"] = max(
+                        1.0,
+                        min(120.0, float(timing.get("average_response_time", 10.0))),
+                    )
+                except (ValueError, TypeError):
+                    timing["average_response_time"] = defaults_timing[
+                        "average_response_time"
+                    ]
+
+                # Validate max_progress_time
+                try:
+                    timing["max_progress_time"] = max(
+                        5.0, min(300.0, float(timing.get("max_progress_time", 30.0)))
+                    )
+                except (ValueError, TypeError):
+                    timing["max_progress_time"] = defaults_timing["max_progress_time"]
+
+                # Validate progress_update_interval
+                try:
+                    timing["progress_update_interval"] = max(
+                        0.1,
+                        min(5.0, float(timing.get("progress_update_interval", 0.5))),
+                    )
+                except (ValueError, TypeError):
+                    timing["progress_update_interval"] = defaults_timing[
+                        "progress_update_interval"
+                    ]
+
+            # Validate tool_priorities
+            if not isinstance(tool_mgmt.get("tool_priorities"), dict):
+                tool_mgmt["tool_priorities"] = defaults_tool_mgmt["tool_priorities"]
+            else:
+                # Validate each priority value is an integer
+                priorities = tool_mgmt["tool_priorities"]
+                validated_priorities = {}
+                for tool_name, priority in priorities.items():
+                    try:
+                        validated_priorities[tool_name] = int(priority)
+                    except (ValueError, TypeError):
+                        print(
+                            f"Warning: Invalid priority for tool '{tool_name}': "
+                            f"{priority}. Using default priority."
+                        )
+                        # Don't include invalid priorities
+                tool_mgmt["tool_priorities"] = validated_priorities
+
+            config["tool_management"] = tool_mgmt
 
         # Validate server mode configuration
         if not isinstance(config.get("server_mode"), dict):
@@ -495,6 +601,76 @@ class AIxTermConfig:
 
         return True
 
+    def update_response_timing(self, actual_response_time: float) -> None:
+        """Update running average of response times for adaptive progress.
+
+        Args:
+            actual_response_time: Actual time taken for the AI response in seconds
+        """
+        try:
+            timing_config = self.get("tool_management.response_timing", {})
+            current_avg = timing_config.get("average_response_time", 10.0)
+
+            # Clamp input to reasonable bounds first (0.5-120 seconds)
+            clamped_time = max(0.5, min(120.0, actual_response_time))
+
+            # Check if this is the first update (current_avg is still initial config)
+            # If so, use the actual time as starting point instead of averaging
+            if not hasattr(self, "_timing_initialized") or not self._timing_initialized:
+                # First update - use actual time as baseline
+                new_avg = clamped_time
+                self._timing_initialized = True
+                self.logger.debug(
+                    f"Initializing adaptive timing with first measurement: "
+                    f"{new_avg:.2f}s"
+                )
+            else:
+                # Subsequent updates - use exponential moving average with alpha=0.3
+                alpha = 0.3
+                new_avg = alpha * clamped_time + (1 - alpha) * current_avg
+                self.logger.debug(
+                    f"Updated average response time: {current_avg:.2f}s -> "
+                    f"{new_avg:.2f}s (actual: {actual_response_time:.2f}s)"
+                )
+
+            # Clamp result to reasonable bounds for progress display (1-60 seconds)
+            new_avg = max(1.0, min(60.0, new_avg))
+
+            # Update the config
+            self.set("tool_management.response_timing.average_response_time", new_avg)
+
+            # Optionally save to persist across runs
+            if hasattr(self, "_auto_save_timing") and self._auto_save_timing:
+                self.save()
+
+        except Exception as e:
+            self.logger.debug(f"Error updating response timing: {e}")
+
+    def enable_auto_save_timing(self, enabled: bool = True) -> None:
+        """Enable automatic saving of timing updates.
+
+        Args:
+            enabled: Whether to auto-save timing updates to config file
+        """
+        self._auto_save_timing = enabled
+
+    def get_response_timing_stats(self) -> Dict[str, Any]:
+        """Get current response timing statistics.
+
+        Returns:
+            Dictionary with timing statistics
+        """
+        timing_config = self.get("tool_management.response_timing", {})
+        return {
+            "average_response_time": timing_config.get("average_response_time", 10.0),
+            "max_progress_time": timing_config.get("max_progress_time", 30.0),
+            "progress_update_interval": timing_config.get(
+                "progress_update_interval", 0.5
+            ),
+            "auto_save_enabled": getattr(self, "_auto_save_timing", False),
+            "timing_initialized": getattr(self, "_timing_initialized", False),
+        }
+
     @property
     def config(self) -> Dict[str, Any]:
         """Get full configuration dictionary."""
@@ -517,7 +693,7 @@ class AIxTermConfig:
         Returns:
             Total context size in tokens
         """
-        return int(self.get("context_size", 4000))
+        return int(self.get("context_size", 4096))
 
     def get_response_buffer_size(self) -> int:
         """Get the response buffer size.
@@ -529,7 +705,7 @@ class AIxTermConfig:
         Returns:
             Response buffer size in tokens
         """
-        return int(self.get("response_buffer_size", 1000))
+        return int(self.get("response_buffer_size", 1024))
 
     def get_available_context_size(self) -> int:
         """Get the available context size for input after reserving response buffer.

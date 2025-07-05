@@ -18,6 +18,15 @@ class ToolHandler:
         self.config = config_manager
         self.mcp_client = mcp_client
         self.logger = logger
+        self.progress_display_manager = None
+
+    def set_progress_display_manager(self, progress_display_manager: Any) -> None:
+        """Set the progress display manager for clearing displays during tool execution.
+
+        Args:
+            progress_display_manager: Progress display manager instance
+        """
+        self.progress_display_manager = progress_display_manager
 
     def execute_tool_call(
         self,
@@ -100,6 +109,9 @@ class ToolHandler:
 
             self.logger.info(f"Executing tool: {function_name}")
 
+            # Display tool execution to user
+            self._display_tool_execution(function_name, function.get("arguments", "{}"))
+
             # Create progress callback if factory provided
             progress_callback = None
             if progress_callback_factory:
@@ -125,34 +137,28 @@ class ToolHandler:
                     f"{str(result)[:300]}..."
                 )
 
-                # Smart context management for tool results
-                # Calculate remaining context budget after conversation
-                # so far using proper token counting
-                conversation_tokens = token_manager.count_tokens_for_messages(
-                    conversation_messages,
-                    self.config.get("model", "gpt-3.5-turbo"),
-                )
-                remaining_context = max_context_size - conversation_tokens
-
-                # Reserve space for continued conversation (at least 200 tokens)
-                available_for_result = max(200, remaining_context // 2)
-                # Use token-aware truncation instead of character estimation
-                max_result_tokens = available_for_result
-
                 # Extract and format tool result for LLM consumption
                 result_content = self.extract_tool_result_content(result)
 
-                # Apply token-based truncation
-                result_content = token_manager.apply_token_limit(
-                    result_content,
-                    max_result_tokens,
-                    self.config.get("model", "gpt-3.5-turbo"),
+                # Fresh tool results should NOT be truncated - they contain critical
+                # information that the AI needs to see in full. Only apply token
+                # limits to older tool results in conversation history during
+                # intelligent summarization phases.
+
+                # Log the full result size for monitoring
+                result_tokens = token_manager.estimate_tokens(result_content)
+                self.logger.debug(
+                    f"Fresh tool result for {function_name}: {result_tokens} tokens, "
+                    f"preserving full content for AI analysis"
                 )
 
                 self.logger.debug(
                     f"Processed tool result for {function_name}: "
                     f"{result_content[:200]}..."
                 )
+
+                # Display tool result to user
+                self._display_tool_result(function_name, result_content, success=True)
 
                 # Add tool result to conversation
                 conversation_messages.append(
@@ -169,6 +175,10 @@ class ToolHandler:
 
             except Exception as e:
                 self.logger.error(f"Tool execution failed: {e}")
+
+                # Display tool failure to user
+                self._display_tool_result(function_name, str(e), success=False)
+
                 # Add error result to conversation
                 conversation_messages.append(
                     {
@@ -190,6 +200,12 @@ class ToolHandler:
         result_content = ""
 
         if isinstance(result, dict):
+            # Handle Pythonium Result format with success/error fields
+            if "success" in result and not result.get("success", True):
+                # This is a failed result, extract the error message
+                error_msg = result.get("error", "Unknown error occurred")
+                return f"Error: {error_msg}"
+
             # Handle MCP response format
             if "content" in result:
                 content_obj = result.get("content")
@@ -205,28 +221,110 @@ class ToolHandler:
                     result_content = content_obj
                 else:
                     result_content = str(content_obj)
+            elif "data" in result:
+                # Handle Pythonium Result format with data field
+                data_obj = result.get("data")
+                if isinstance(data_obj, dict):
+                    # For structured data, format it as JSON for better readability
+                    result_content = json.dumps(data_obj, indent=2)
+                else:
+                    result_content = str(data_obj) if data_obj is not None else ""
             elif "result" in result:
                 # Alternative result format
                 result_content = str(result["result"])
+            elif "output" in result:
+                # Handle output format
+                result_content = str(result["output"])
+            elif "stdout" in result:
+                # Handle stdout format
+                result_content = str(result["stdout"])
+            elif "response" in result:
+                # Handle response format
+                result_content = str(result["response"])
             else:
-                # Fallback: stringify the entire dict but make it readable
-                if len(str(result)) > 500:
-                    # For large results, try to extract key information
-                    important_keys = [
-                        "output",
-                        "stdout",
-                        "result",
-                        "data",
-                        "response",
-                    ]
-                    for key in important_keys:
-                        if key in result:
-                            result_content = str(result[key])
-                            break
-                if not result_content:
-                    result_content = json.dumps(result, indent=2)
+                # Unknown dict format - convert to readable JSON
+                result_content = json.dumps(result, indent=2)
         else:
             # Non-dict result
             result_content = str(result)
 
         return result_content
+
+    def _display_tool_execution(self, function_name: str, arguments_str: str) -> None:
+        """Display tool execution to user.
+
+        Args:
+            function_name: Name of the tool being executed
+            arguments_str: JSON string of arguments
+        """
+        try:
+            # Parse arguments for display
+            arguments = json.loads(arguments_str) if arguments_str else {}
+
+            # Format arguments for display
+            arg_display = []
+            for key, value in arguments.items():
+                if isinstance(value, str) and len(value) > 50:
+                    # Truncate long string values
+                    value_display = value[:47] + "..."
+                else:
+                    value_display = value
+                arg_display.append(f"{key}: {json.dumps(value_display)}")
+
+            args_formatted = ", ".join(arg_display) if arg_display else "(no arguments)"
+
+            # Display the tool execution
+            print(f"{function_name}: {args_formatted}")
+
+        except Exception as e:
+            # Fallback display if argument parsing fails
+            print(f"{function_name}: {arguments_str}")
+            self.logger.debug(f"Failed to parse tool arguments for display: {e}")
+
+    def _display_tool_result(
+        self, function_name: str, result_content: str, success: bool = True
+    ) -> None:
+        """Display tool execution result to user.
+
+        Args:
+            function_name: Name of the tool that was executed
+            result_content: The result content
+            success: Whether the execution was successful
+        """
+        try:
+            if success:
+                # Try to extract key information for brief display
+                if "Found" in result_content and "result" in result_content:
+                    # Extract result count from "Found X results" pattern
+                    lines = result_content.split("\n")
+                    if lines:
+                        header = lines[0]
+                        if "Found 0" in header or "No results" in result_content:
+                            print(f"→ {function_name} completed (no results found)")
+                        else:
+                            # Extract number from "Found X results" or search results
+                            import re
+
+                            match = re.search(r"Found (\d+) (?:search )?result", header)
+                            if match:
+                                count = match.group(1)
+                                print(
+                                    f"→ {function_name} completed "
+                                    f"({count} results found)"
+                                )
+                            else:
+                                print(f"→ {function_name} completed")
+                    else:
+                        print(f"→ {function_name} completed")
+                else:
+                    # Generic success display for other tools
+                    print(f"→ {function_name} completed")
+            else:
+                # Error display
+                print(f"→ {function_name} failed")
+
+        except Exception as e:
+            # Fallback display
+            status = "completed" if success else "failed"
+            print(f"→ {function_name} {status}")
+            self.logger.debug(f"Failed to format tool result display: {e}")

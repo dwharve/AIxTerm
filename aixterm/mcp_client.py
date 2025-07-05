@@ -687,9 +687,9 @@ class MCPServer:
             )
             result = future.result(timeout=self.config.get("timeout", 30))
 
-            # Extract content from result
+            # Extract content from result - handle both MCP and Pythonium formats
             if hasattr(result, "content") and result.content:
-                # Handle different content types
+                # Standard MCP protocol format
                 content_parts = []
                 for content in result.content:
                     if hasattr(content, "text"):
@@ -700,6 +700,16 @@ class MCPServer:
                         content_parts.append(str(content))
 
                 return "\n".join(content_parts) if content_parts else ""
+            elif hasattr(result, "success") and hasattr(result, "data"):
+                # Pythonium Result object format
+                if not result.success:
+                    # Error result
+                    error_msg = getattr(result, "error", "Unknown error")
+                    return f"Error: {error_msg}"
+                else:
+                    # Success result - return the data
+                    data = getattr(result, "data", None)
+                    return str(data) if data is not None else ""
             else:
                 return str(result)
 

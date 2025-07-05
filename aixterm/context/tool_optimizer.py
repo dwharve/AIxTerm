@@ -58,62 +58,92 @@ class ToolOptimizer:
             name = function.get("name", "").lower()
             description = function.get("description", "").lower()
 
-            score = 0
+            # Start with configured tool priorities
+            configured_priorities = self.config.get(
+                "tool_management.tool_priorities", {}
+            )
+            score: int = configured_priorities.get(name, 0)
 
-            # Essential system tools (highest priority)
-            essential_keywords = [
-                "execute",
-                "command",
-                "run",
-                "shell",
-                "terminal",
-                "system",
-            ]
-            if any(keyword in name for keyword in essential_keywords):
-                score += 1000
+            # If no specific priority configured, use keyword-based scoring
+            if score == 0:
+                # Essential system tools (highest priority)
+                essential_keywords = [
+                    "execute",
+                    "command",
+                    "run",
+                    "shell",
+                    "terminal",
+                    "system",
+                ]
+                if any(keyword in name for keyword in essential_keywords):
+                    score = 1000
 
-            # File operations (very high priority)
-            file_keywords = [
-                "file",
-                "read",
-                "write",
-                "list",
-                "directory",
-                "find",
-                "search",
-                "create",
-                "delete",
-                "move",
-                "copy",
-            ]
-            if any(keyword in name for keyword in file_keywords):
-                score += 800
+                # File operations (very high priority)
+                elif any(
+                    keyword in name
+                    for keyword in [
+                        "file",
+                        "read",
+                        "write",
+                        "list",
+                        "directory",
+                        "find",
+                        "search",
+                        "create",
+                        "delete",
+                        "move",
+                        "copy",
+                    ]
+                ):
+                    score = 800
 
-            # Development tools (high priority)
-            dev_keywords = [
-                "git",
-                "build",
-                "compile",
-                "test",
-                "debug",
-                "package",
-                "install",
-                "deploy",
-            ]
-            if any(keyword in name for keyword in dev_keywords):
-                score += 600
+                # Development tools (high priority)
+                elif any(
+                    keyword in name
+                    for keyword in [
+                        "git",
+                        "build",
+                        "compile",
+                        "test",
+                        "debug",
+                        "package",
+                        "install",
+                        "deploy",
+                    ]
+                ):
+                    score = 600
 
-            # Data processing tools (medium-high priority)
-            data_keywords = [
-                "parse",
-                "format",
-                "convert",
-                "transform",
-                "process",
-                "analyze",
-            ]
-            if any(keyword in name for keyword in data_keywords):
-                score += 400
+                # Data processing tools (medium-high priority)
+                elif any(
+                    keyword in name
+                    for keyword in [
+                        "parse",
+                        "format",
+                        "convert",
+                        "transform",
+                        "process",
+                        "analyze",
+                    ]
+                ):
+                    score = 400
+
+                # Web and network tools
+                elif any(
+                    keyword in name
+                    for keyword in [
+                        "web",
+                        "search",
+                        "download",
+                        "request",
+                        "url",
+                        "http",
+                    ]
+                ):
+                    score = 300
+
+                # Default priority for unmatched tools
+                else:
+                    score = 100
 
             # Context-aware prioritization based on query
             query_keywords = query_lower.split()
@@ -139,11 +169,13 @@ class ToolOptimizer:
         tools_with_scores = [(tool, get_tool_priority(tool)) for tool in tools]
         tools_with_scores.sort(key=lambda x: x[1], reverse=True)
 
-        top_5_names = [
-            t[0].get("function", {}).get("name", "unknown")
-            for t in tools_with_scores[:5]
+        # Log top tools with their priorities for debugging
+        top_5_tools = tools_with_scores[:5]
+        top_5_info = [
+            f"{t[0].get('function', {}).get('name', 'unknown')}({t[1]})"
+            for t in top_5_tools
         ]
-        self.logger.debug(f"Tool prioritization complete. Top 5 tools: {top_5_names}")
+        self.logger.debug(f"Tool prioritization complete. Top 5 tools: {top_5_info}")
 
         return [tool for tool, _ in tools_with_scores]
 

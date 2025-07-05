@@ -3,16 +3,11 @@
 Comprehensive unit tests for MCP progress notification functionality.
 """
 
-import os
-import sys
 import time
 import unittest
 from unittest.mock import Mock, patch
 
-# Add aixterm to path for testing
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from aixterm.mcp_client import (  # noqa: E402
+from aixterm.mcp_client import (
     MCPClient,
     MCPError,
     MCPServer,

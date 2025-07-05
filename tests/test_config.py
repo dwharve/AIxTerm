@@ -20,8 +20,8 @@ class TestAIxTermConfig:
         config = AIxTermConfig(config_path)
 
         assert config.get("model") == "local-model"
-        assert config.get("context_size") == 4000  # Updated to match new default
-        assert config.get("response_buffer_size") == 1000  # Check new parameter
+        assert config.get("context_size") == 4096  # Updated to match new default
+        assert config.get("response_buffer_size") == 1024  # Check new parameter
         assert isinstance(config.get("mcp_servers"), list)
         assert len(config.get("mcp_servers")) == 0
 
@@ -75,7 +75,7 @@ class TestAIxTermConfig:
         config = AIxTermConfig(config_path)
 
         assert isinstance(config.get("context_size"), int)
-        assert config.get("context_size") == 4000  # Default value
+        assert config.get("context_size") == 4096  # Default value
         assert config.get("api_url") == "http://localhost/v1/chat/completions"
         assert isinstance(config.get("mcp_servers"), list)
 

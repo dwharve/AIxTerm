@@ -47,6 +47,8 @@ class LLMClient:
             config_manager, self.logger, progress_display_manager
         )
         self.tool_handler = ToolHandler(config_manager, mcp_client, self.logger)
+        # Pass progress display manager to tool handler for clearing displays
+        self.tool_handler.set_progress_display_manager(progress_display_manager)
 
     def chat_completion(
         self,
@@ -117,6 +119,19 @@ class LLMClient:
             # Some models expect tool_choice to be set
             payload["tool_choice"] = "auto"
 
+        # Show API request progress with spinner for non-streaming requests
+        api_progress = None
+        if not stream and self.progress_display_manager and not silent:
+            try:
+                api_progress = self.progress_display_manager.create_progress(
+                    progress_token="api_request",
+                    title="Waiting for AI response",
+                    total=None,  # Indeterminate progress (spinner)
+                    show_immediately=True,
+                )
+            except Exception as e:
+                self.logger.debug(f"Could not create API progress indicator: {e}")
+
         try:
             response = requests.post(
                 self.config.get("api_url", "http://localhost/v1/chat/completions"),
@@ -132,11 +147,27 @@ class LLMClient:
                     response, silent
                 )
             else:
+                # Complete API progress for non-streaming requests
+                if api_progress:
+                    try:
+                        api_progress.complete("Response received")
+                    except Exception as e:
+                        self.logger.debug(f"Error completing API progress: {e}")
+
                 data = response.json()
                 content: str = data["choices"][0]["message"]["content"]
                 return content
 
         except requests.exceptions.RequestException as e:
+            # Complete API progress on error
+            if api_progress:
+                try:
+                    api_progress.complete("Request failed")
+                except Exception as progress_error:
+                    self.logger.debug(
+                        f"Error completing API progress on failure: {progress_error}"
+                    )
+
             self.logger.error(f"LLM request failed: {e}")
             raise LLMError(f"Error communicating with LLM: {e}")
         except Exception as e:
@@ -178,8 +209,10 @@ class LLMClient:
 
         # System prompt should NOT include tool descriptions - tools are provided
         # via API field. This follows OpenAI API and MCP specifications properly
-        # and saves tokens
-        system_prompt = base_system_prompt
+        # and saves tokens. However, we can enhance with categories and tags.
+        system_prompt = self._enhance_system_prompt_with_tool_info(
+            base_system_prompt, tools
+        )
 
         # Build initial messages
         messages = [{"role": "system", "content": system_prompt}]
@@ -259,7 +292,9 @@ class LLMClient:
             Complete response text including tool results
         """
         conversation_messages = messages.copy()
-        max_iterations = 5  # Prevent infinite loops
+        max_iterations = self.config.get(
+            "tool_management.max_tool_iterations", 5
+        )  # Get from config with fallback
         iteration = 0
         final_response = ""
 
@@ -529,6 +564,118 @@ class LLMClient:
         except Exception as e:
             self.logger.error(f"Unexpected error in LLM request: {e}")
             return None
+
+    def _enhance_system_prompt_with_tool_info(
+        self, base_prompt: str, tools: Optional[List[Dict[str, Any]]] = None
+    ) -> str:
+        """Enhance system prompt with dynamically generated tool categories and tags.
+
+        Args:
+            base_prompt: Base system prompt
+            tools: Available tools to analyze
+
+        Returns:
+            Enhanced system prompt with tool information
+        """
+        if not tools:
+            return base_prompt
+
+        try:
+            # Extract categories and tags from available tools
+            categories = set()
+            tags = set()
+
+            for tool in tools:
+                function = tool.get("function", {})
+
+                # Try to extract category from tool metadata if available
+                if "category" in function:
+                    categories.add(function["category"])
+
+                # Try to extract tags from tool metadata if available
+                if "tags" in function:
+                    tool_tags = function["tags"]
+                    if isinstance(tool_tags, list):
+                        tags.update(tool_tags)
+                    elif isinstance(tool_tags, str):
+                        tags.add(tool_tags)
+
+                # Infer categories and tags from tool names and descriptions
+                name = function.get("name", "").lower()
+                description = function.get("description", "").lower()
+
+                # Infer categories from names
+                if any(
+                    keyword in name
+                    for keyword in ["execute", "command", "run", "shell"]
+                ):
+                    categories.add("system")
+                elif any(
+                    keyword in name
+                    for keyword in ["file", "read", "write", "find", "search"]
+                ):
+                    categories.add("filesystem")
+                elif any(
+                    keyword in name for keyword in ["web", "http", "search", "download"]
+                ):
+                    categories.add("network")
+                elif any(
+                    keyword in name for keyword in ["git", "build", "test", "deploy"]
+                ):
+                    categories.add("development")
+                elif any(keyword in name for keyword in ["tool", "describe", "list"]):
+                    categories.add("introspection")
+
+                # Infer tags from names and descriptions
+                common_tags = [
+                    "file",
+                    "command",
+                    "search",
+                    "web",
+                    "git",
+                    "build",
+                    "test",
+                    "read",
+                    "write",
+                    "execute",
+                    "download",
+                    "upload",
+                    "process",
+                    "analyze",
+                    "convert",
+                    "format",
+                    "backup",
+                    "security",
+                ]
+
+                for tag in common_tags:
+                    if tag in name or tag in description:
+                        tags.add(tag)
+
+            # Format the enhanced prompt
+            if categories or tags:
+                tool_info = "\n\nAvailable tool capabilities:"
+
+                if categories:
+                    sorted_categories = sorted(categories)
+                    tool_info += f"\nCategories: {', '.join(sorted_categories)}"
+
+                if tags:
+                    # Limit tags to most relevant ones to avoid bloating prompt
+                    sorted_tags = sorted(tags)[:15]  # Limit to 15 most common tags
+                    tool_info += f"\nCommon operations: {', '.join(sorted_tags)}"
+
+                tool_info += (
+                    "\n\nUse search_tools to find specific tools for tasks, "
+                    "or describe_tool for detailed information about any tool."
+                )
+
+                return base_prompt + tool_info
+
+        except Exception as e:
+            self.logger.debug(f"Error enhancing system prompt with tool info: {e}")
+
+        return base_prompt
 
     # Delegation methods for backward compatibility with tests
     def _validate_and_fix_role_alternation(

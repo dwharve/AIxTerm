@@ -45,7 +45,7 @@ class AIxTerm:
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
 
-    def _signal_handler(self, signum: int, frame: Any) -> None:
+    def _signal_handler(self, signum: int, _frame: Any) -> None:
         """Handle shutdown signals gracefully."""
         self.logger.info(f"Received signal {signum}, shutting down gracefully")
         self.shutdown()
@@ -236,29 +236,33 @@ class AIxTerm:
                     from .mcp_client import ProgressParams
 
                     if isinstance(params, ProgressParams):
-                        # Try to update progress display, but don't let failures prevent completion  # noqa: E501
-                        try:
+                        # Check if this is a completion signal (progress = 100)
+                        if params.progress >= 100:
+                            # Complete the progress display to clear it
+                            progress_display.complete("")
+                        else:
+                            # Regular progress update
                             progress_display.update(
                                 progress=params.progress,
                                 message=params.message,
                                 total=params.total,
                             )
-                        except Exception:
-                            pass
-
                     else:
                         # Handle raw parameters
-                        progress_display.update(
-                            progress=getattr(params, "progress", 0),
-                            message=getattr(params, "message", None),
-                            total=getattr(params, "total", None),
-                        )
+                        progress = getattr(params, "progress", 0)
+                        if progress >= 100:
+                            # Complete the progress display to clear it
+                            progress_display.complete("")
+                        else:
+                            progress_display.update(
+                                progress=progress,
+                                message=getattr(params, "message", None),
+                                total=getattr(params, "total", None),
+                            )
                 except Exception as e:
-                    # If there's any error and we have completion-like parameters, try to complete anyway  # noqa: E501
+                    # If there's any error, try to complete the display to clear it
                     try:
-                        if hasattr(params, "progress") and hasattr(params, "total"):
-                            if getattr(params, "progress", 0) >= 100:
-                                progress_display.complete("")
+                        progress_display.complete("")
                     except Exception:
                         pass
                     self.logger.debug(f"Error updating progress display: {e}")
@@ -361,9 +365,7 @@ class AIxTerm:
                 )
             else:
                 print("ℹ No active session context found to clear")
-                print(
-                    "  This may be a new session or context was already empty"[:85]
-                )  # noqa: E501
+                print("  This may be a new session or context was already empty"[:85])
         except Exception as e:
             self.logger.error(f"Error clearing context: {e}")
             print(f"✗ Failed to clear context: {e}")
@@ -391,8 +393,7 @@ class AIxTerm:
         if config_path.exists() and not force:
             print(f"Configuration file already exists at: {config_path}")
             print(
-                "Use --init-config --force to overwrite the existing "
-                "configuration."  # noqa: E501
+                "Use --init-config --force to overwrite the existing " "configuration."
             )
             return
 
