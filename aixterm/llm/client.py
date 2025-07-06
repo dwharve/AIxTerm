@@ -683,27 +683,3 @@ class LLMClient:
     ) -> List[Dict[str, Any]]:
         """Delegate to message validator for backward compatibility."""
         return self.message_validator.validate_and_fix_role_alternation(messages)
-
-    def _count_tokens(self, text: str, model: str = "gpt-3.5-turbo") -> int:
-        """Delegate to token manager for backward compatibility."""
-        return self.token_manager.estimate_tokens(text)
-
-    def _count_tokens_for_messages(
-        self, messages: List[Dict[str, Any]], model: str = "gpt-3.5-turbo"
-    ) -> int:
-        """Delegate to token manager for backward compatibility."""
-        return self.token_manager.count_tokens_for_messages(messages, model)
-
-    def _count_tokens_for_tools(
-        self, tools: List[Dict[str, Any]], model: str = "gpt-3.5-turbo"
-    ) -> int:
-        """Delegate to token manager for backward compatibility."""
-        return self.token_manager.count_tokens_for_tools(tools, model)
-
-    def _handle_streaming_response(self, response: Any) -> str:
-        """Delegate to streaming handler for backward compatibility."""
-        return self.streaming_handler.handle_streaming_response(response)
-
-    def _handle_tool_call(self, tool_call: Dict[str, Any]) -> None:
-        """Delegate to streaming handler for backward compatibility."""
-        return self.streaming_handler.handle_tool_call(tool_call)

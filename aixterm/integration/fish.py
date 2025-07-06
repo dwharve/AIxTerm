@@ -181,8 +181,8 @@ function aixterm_clear_log
     end
 end
 
-# Function to capture command output using a wrapper (for explicit use)
-function log_with_output
+# Function for explicit command execution with guaranteed output capture
+function log_command
     set cmd $argv
     set log_file (_aixterm_get_log_file)
     set timestamp (date '+%Y-%m-%d %H:%M:%S')
@@ -190,7 +190,7 @@ function log_with_output
 
     # Log the command
     begin
-        echo "# Command with output capture at $timestamp: $cmd"
+        echo "# Explicit command execution at $timestamp: $cmd"
     end >> "$log_file" 2>/dev/null
 
     # Execute command and capture output
@@ -211,26 +211,25 @@ function log_with_output
     return $exit_code
 end
 
-# Function to enable full output logging for current session (experimental)
-function aixterm_enable_full_logging
-    echo "Enabling experimental full output logging..."
-    echo "This will capture all command output in addition to commands."
-    echo "Note: This is experimental and may affect shell performance."
-
-    # Use script command in a clean way
-    set log_file (_aixterm_get_log_file)
-    echo "# Full output logging enabled at "(date '+%Y-%m-%d %H:%M:%S') >> "$log_file"
-
-    # Start a new shell session with script logging
-    exec script -a -f "$log_file.full" -c fish
+# Function to toggle minimal logging mode (commands only, no output)
+function aixterm_toggle_minimal_logging
+    if set -q _AIXTERM_MINIMAL_MODE
+        set -e _AIXTERM_MINIMAL_MODE
+        echo "AIxTerm: Full logging enabled (commands + timing)"
+    else
+        set -g _AIXTERM_MINIMAL_MODE 1
+        echo "AIxTerm: Minimal logging enabled (commands only)"
+    end
 end
 
-# Skip initialization if already loaded (but functions above are always defined)
-if set -q _AIXTERM_INTEGRATION_LOADED
-    exit 0
+# Function to enable legacy minimal logging mode
+function aixterm_minimal_logging
+    set -g _AIXTERM_MINIMAL_MODE 1
+    echo "AIxTerm: Switched to minimal logging mode (commands only)"
+    echo "Use 'aixterm_toggle_minimal_logging' to switch back to full logging"
 end
 
-# Fish-specific command logging using preexec event
+# Fish-specific command logging using preexec event with timing capture
 function _aixterm_log_command --on-event fish_preexec
     # Enhanced filtering to skip internal commands
     set cmd $argv[1]
@@ -246,12 +245,13 @@ function _aixterm_log_command --on-event fish_preexec
                   or echo 'unknown')": $cmd"
         end >> "$log_file" 2>/dev/null
 
-        # Store last command for exit code logging
+        # Store last command and start time for timing
         set -g _AIXTERM_LAST_COMMAND "$cmd"
+        set -g _AIXTERM_COMMAND_START_TIME (date '+%s.%N')
     end
 end
 
-# Post-command function to capture exit codes
+# Enhanced post-command function to capture exit codes and timing
 function _aixterm_post_command --on-event fish_postexec
     set exit_code $status
     set log_file (_aixterm_get_log_file)
@@ -259,8 +259,21 @@ function _aixterm_post_command --on-event fish_postexec
     # Log exit code for the previous command
     if set -q _AIXTERM_LAST_COMMAND; \\
        and not string match -q "*_aixterm_*" -- "$_AIXTERM_LAST_COMMAND"
+
+        # Calculate command duration if we have start time
+        set duration ""
+        if set -q _AIXTERM_COMMAND_START_TIME
+            set end_time (date '+%s.%N')
+            set duration (echo "$end_time - $_AIXTERM_COMMAND_START_TIME" | bc 2>/dev/null; or echo "")
+            set -e _AIXTERM_COMMAND_START_TIME
+        end
+
+        # Log completion info with timing
         begin
             echo "# Exit code: $exit_code"
+            if test -n "$duration"
+                echo "# Duration: {$duration}s"
+            end
             echo ""
         end >> "$log_file" 2>/dev/null
     end
@@ -289,13 +302,90 @@ end
 # Initialize fresh log session
 _aixterm_init_fresh_log
 
+# Function to check if integration is installed in config files
+function _aixterm_check_installation
+    set needs_install false
+    set fish_config "$HOME/.config/fish/config.fish"
+
+    # Check config.fish
+    if test -f "$fish_config"
+        if not grep -q "aixterm" "$fish_config" 2>/dev/null
+            set needs_install true
+        end
+    else
+        set needs_install true
+    end
+
+    echo $needs_install
+end
+
+# Function to install integration in shell config files
+function _aixterm_install_integration
+    set fish_config "$HOME/.config/fish/config.fish"
+    set script_path (status current-filename)  # fish-specific way to get script path
+
+    # If we can't determine the script path, skip auto-installation
+    if test -z "$script_path"; or not test -f "$script_path"
+        echo "AIxTerm: Cannot determine integration script path for auto-installation"
+        return 1
+    end
+
+    # Create config directory and file if they don't exist
+    if not test -d "$HOME/.config/fish"
+        mkdir -p "$HOME/.config/fish"
+        echo "Created fish config directory"
+    end
+
+    if not test -f "$fish_config"
+        touch "$fish_config"
+        echo "Created config.fish"
+    end
+
+    # Add integration to config.fish
+    begin
+        echo ""
+        echo "# AIxTerm Integration - Auto-installed"
+        echo "if test -f \"$script_path\""
+        echo "    source \"$script_path\""
+        echo "end"
+    end >> "$fish_config"
+
+    echo "AIxTerm integration installed in config.fish"
+    echo "Restart your shell or run 'source ~/.config/fish/config.fish' to activate"
+    return 0
+end
+
+# Check and offer to install integration if missing
+if test "(_aixterm_check_installation)" = "true"
+    # Only auto-install if we're in an interactive shell and not already running from config
+    if status is-interactive; and not set -q _AIXTERM_AUTO_INSTALLING
+        echo "AIxTerm integration not found in shell configuration."
+        echo "Would you like to install it automatically? [y/N]"
+        read -l response
+        if string match -qi 'y*' -- "$response"
+            set -g _AIXTERM_AUTO_INSTALLING 1
+            _aixterm_install_integration
+            set -e _AIXTERM_AUTO_INSTALLING
+        else
+            echo "To install manually, add the following line to your ~/.config/fish/config.fish:"
+            echo "source \""(status current-filename)"\""
+        end
+    end
+end
+
+# Skip initialization if already loaded (but functions above are always defined)
+if set -q _AIXTERM_INTEGRATION_LOADED
+    exit 0
+end
+
 # Log session start
 begin
     echo "# AIxTerm session started at "(date '+%Y-%m-%d %H:%M:%S')
     echo "# TTY: "(tty 2>/dev/null; or echo 'unknown')
     echo "# PID: "(echo %self)
-    echo "# Command logging active (use 'log_with_output <cmd>' for output capture)"
-    echo "# Use 'aixterm_enable_full_logging' for experimental full output logging"
+    echo "# Full logging active (commands + timing automatically captured)"
+    echo "# Use 'aixterm_toggle_minimal_logging' to switch to commands-only mode"
+    echo "# Use 'log_command <cmd>' for explicit command execution with guaranteed output"
     echo ""
 end >> (_aixterm_get_log_file) 2>/dev/null
 
@@ -371,9 +461,9 @@ set -g _AIXTERM_INTEGRATION_LOADED 1
         return [
             "Fish integration uses event-driven hooks (fish_preexec and fish_postexec)",
             "Configuration is stored in ~/.config/fish/config.fish",
-            "Commands and exit codes are logged automatically",
-            "Use 'log_with_output <command>' to capture command output",
-            "Use 'aixterm_enable_full_logging' for experimental full output capture",
+            "Commands, timing, and exit codes are logged automatically by default",
+            "Use 'aixterm_toggle_minimal_logging' to switch to commands-only mode",
+            "Use 'log_command <command>' for explicit command execution with guaranteed output",
             "Integration is only active in interactive shells",
             "Use 'aixterm_status' to check integration status",
         ]
@@ -387,19 +477,9 @@ set -g _AIXTERM_INTEGRATION_LOADED 1
             "Check file permissions on ~/.aixterm_log.* files",
             "Fish events require fish version 2.3.0 or later",
             "Use 'fish --version' to verify fish version compatibility",
-            "Use 'log_with_output <cmd>' for commands that need output capture",
-            "If shell becomes unresponsive, check for hanging tee processes",
-        ]
-
-    def get_fish_features(self) -> List[str]:
-        """Return fish-specific feature descriptions."""
-        return [
-            "Event-driven command logging with fish_preexec",
-            "Automatic session cleanup on shell exit",
-            "Native fish event system for reliable logging",
-            "TTY-based log file separation",
-            "Enhanced ai function with automatic logging",
-            "Session status and flush utilities",
+            "Use 'log_command <cmd>' for commands that need guaranteed output capture",
+            "If performance issues occur, use 'aixterm_toggle_minimal_logging' for commands-only mode",
+            "Clean up old log files with 'aixterm_cleanup_logs' if disk space is an issue",
         ]
 
     def check_fish_events_support(self) -> bool:

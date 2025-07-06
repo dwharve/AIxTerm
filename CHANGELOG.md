@@ -5,6 +5,17 @@ All notable changes to AIxTerm will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2025-07-05
+
+### Changed
+- Full shell logging is now the default behavior (no longer experimental)
+- Improved shell integration with automatic command output capture
+- Streamlined logging functions for better performance
+
+### Removed
+- Experimental flags and warnings for full output logging
+- Separate "full logging" functions - now integrated into default behavior
+
 ## [0.1.3] - 2025-06-30
 
 ### Changed

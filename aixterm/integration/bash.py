@@ -40,283 +40,206 @@ class Bash(BaseIntegration):
         return [".bashrc", ".bash_profile"]
 
     def generate_integration_code(self) -> str:
-        """Return the bash integration script content."""
+        """Return the simplified bash integration script that uses script for
+        full terminal logging."""
         return """
-# AIxTerm Shell Integration
-# Automatically captures terminal activity for better AI context
+# AIxTerm Shell Integration - Simplified Script-Based Logger
+# Logs complete terminal sessions using the script command
 
 # Only run if we're in an interactive shell
 [[ $- == *i* ]] || return
 
-# Function to get current log file based on TTY
+# Skip auto-start initialization if already loaded, but always define functions in script sessions
+if [[ -n "$_AIXTERM_LOADED" ]] && [[ -z "$_AIXTERM_IN_SCRIPT" ]]; then
+    return
+fi
+
+# Get log file based on original TTY, with proper fallback for script sessions
 _aixterm_get_log_file() {
-    local tty_name=$(tty 2>/dev/null | sed 's|/dev/||g' | sed 's|/|-|g')
+    # If we're in a script session and have the log file set, use that
+    if [[ -n "$_AIXTERM_LOG_FILE" ]]; then
+        echo "$_AIXTERM_LOG_FILE"
+        return
+    fi
+
+    # Use original TTY if available, otherwise current TTY
+    local tty_name
+    if [[ -n "$_AIXTERM_ORIGINAL_TTY" ]]; then
+        tty_name="$_AIXTERM_ORIGINAL_TTY"
+    else
+        tty_name=$(tty 2>/dev/null | sed 's|/dev/||g' | tr '/' '-')
+    fi
     echo "$HOME/.aixterm_log.${tty_name:-default}"
 }
 
-# Enhanced ai function that ensures proper logging
-ai() {
-    local log_file=$(_aixterm_get_log_file)
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local tty_name=$(tty 2>/dev/null)
-
-    # Log the AI command with metadata
-    {
-        echo "# AI command executed at $timestamp on $tty_name"
-        echo "$ ai $*"
-    } >> "$log_file" 2>/dev/null
-
-    # Run aixterm and log output
-    command aixterm "$@" 2>&1 | tee -a "$log_file"
-}
-
-# Function to manually flush current session to log
-aixterm_flush_session() {
-    local log_file=$(_aixterm_get_log_file)
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-
-    echo "# Session flushed at $timestamp" >> "$log_file" 2>/dev/null
-    history -a  # Append current session history to history file
-}
-
-# Function to show current session status
+# Show integration status
 aixterm_status() {
     echo "AIxTerm Integration Status:"
     echo "  Shell: bash"
-    echo "  Active: $(test -n "$_AIXTERM_INTEGRATION_LOADED" && \\
-                    echo "Yes" || echo "No")"
+    echo "  Integration: $(test -n "$_AIXTERM_LOADED" && echo "Active" || echo "Inactive")"
     echo "  Log file: $(_aixterm_get_log_file)"
-    echo "  TTY: $(tty 2>/dev/null || echo 'unknown')"
+    echo "  Current TTY: $(tty 2>/dev/null || echo 'unknown')"
 
-    # Show log file size if it exists
+    if [[ -n "$_AIXTERM_ORIGINAL_TTY" ]]; then
+        echo "  Original TTY: $_AIXTERM_ORIGINAL_TTY"
+    fi
+
     local log_file=$(_aixterm_get_log_file)
     if [[ -f "$log_file" ]]; then
-        local size=$(du -h "$log_file" | cut -f1)
-        local lines=$(wc -l < "$log_file")
-        echo "  Log size: $size ($lines lines)"
+        local size=$(du -h "$log_file" 2>/dev/null | cut -f1)
+        local lines=$(wc -l < "$log_file" 2>/dev/null)
+        echo "  Log size: ${size:-0} (${lines:-0} lines)"
+        echo "  Last modified: $(date -r "$log_file" '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo 'unknown')"
+    else
+        echo "  Log file: Not created yet"
+    fi
+
+    # Show if we're in a script session
+    if [[ -n "$_AIXTERM_IN_SCRIPT" ]]; then
+        echo "  Script session: Active"
+    else
+        echo "  Script session: Not active"
+    fi
+
+    # Show environment variables for debugging
+    echo "  Environment:"
+    echo "    _AIXTERM_LOG_FILE=$_AIXTERM_LOG_FILE"
+    echo "    _AIXTERM_IN_SCRIPT=$_AIXTERM_IN_SCRIPT"
+    echo "    _AIXTERM_ORIGINAL_TTY=$_AIXTERM_ORIGINAL_TTY"
+}
+
+# Start logging with script command
+aixterm_start_logging() {
+    if [[ -n "$_AIXTERM_IN_SCRIPT" ]]; then
+        echo "AIxTerm: Already inside a script session"
+        return 1
+    fi
+
+    local log_file=$(_aixterm_get_log_file)
+
+    if ! command -v script >/dev/null 2>&1; then
+        echo "AIxTerm: 'script' command not available"
+        return 1
+    fi
+
+    echo "Starting AIxTerm logging session..."
+    echo "All terminal activity will be captured to: $log_file"
+
+    # Add session header
+    {
+        echo "# ========================================"
+        echo "# AIxTerm session started: $(date)"
+        echo "# Original TTY: $(tty 2>/dev/null || echo 'unknown')"
+        echo "# ========================================"
+    } >> "$log_file" 2>/dev/null
+
+    # Start script session with all necessary environment variables
+    export _AIXTERM_IN_SCRIPT=1
+    export _AIXTERM_LOG_FILE="$log_file"
+    export _AIXTERM_ORIGINAL_TTY="$(tty 2>/dev/null | sed 's|/dev/||g' | tr '/' '-')"
+    exec script -a -f "$log_file" -c "bash -i"
+}
+
+# Stop current script session
+aixterm_stop_logging() {
+    if [[ -z "$_AIXTERM_IN_SCRIPT" ]]; then
+        echo "AIxTerm: Not in a script session"
+        return 1
+    fi
+
+    local log_file=$(_aixterm_get_log_file)
+
+    # Add session footer
+    {
+        echo ""
+        echo "# ========================================"
+        echo "# AIxTerm session ended: $(date)"
+        echo "# ========================================"
+    } >> "$log_file" 2>/dev/null
+
+    echo "Ending AIxTerm logging session..."
+    exit
+}
+
+# Toggle logging on/off
+aixterm_toggle_logging() {
+    if [[ -n "$_AIXTERM_IN_SCRIPT" ]]; then
+        aixterm_stop_logging
+    else
+        aixterm_start_logging
     fi
 }
 
-# Function to clean up old log files safely
+# Clean up old log files
 aixterm_cleanup_logs() {
-    local days=${1:-7}  # Default to 7 days
-    echo "Cleaning up AIxTerm log files..."
-
-    # Get list of currently active TTYs
-    local active_ttys=$(who | awk '{print $2}' | sort -u)
-
-    # Find all aixterm log files
-    for log_file in "$HOME"/.aixterm_log.*; do
-        [[ -f "$log_file" ]] || continue
-
-        # Extract TTY name from log file
-        local tty_name=$(basename "$log_file" | sed 's/^\\.aixterm_log\\.//')
-
-        # Check if this TTY is currently active
-        local is_active=false
-        for active_tty in $active_ttys; do
-            if [[ "$tty_name" == "$active_tty" || \\
-                 "$tty_name" == "${active_tty//\\//-}" ]]; then
-                is_active=true
-                break
-            fi
-        done
-
-        if [[ "$is_active" == "false" ]]; then
-            # TTY is not active, check if log is old enough
-            if [[ $(find "$log_file" -mtime +$days 2>/dev/null) ]]; then
-                echo "  Removing inactive log: $log_file"
-                rm -f "$log_file"
-            fi
-        fi
-    done
-
+    local days=${1:-7}
+    echo "Cleaning up AIxTerm logs older than $days days..."
+    find "$HOME" -name ".aixterm_log.*" -type f -mtime +$days -delete 2>/dev/null
     echo "Cleanup complete."
 }
 
-# Function to ensure fresh log for new sessions
-_aixterm_init_fresh_log() {
-    local log_file=$(_aixterm_get_log_file)
-    local tty_name=$(tty 2>/dev/null | sed 's|/dev/||g' | sed 's|/|-|g')
-
-    # Always start with a fresh log for new terminal sessions
-    # Check if log exists and if previous session ended properly
-    if [[ -f "$log_file" ]]; then
-        # Check the last few lines to see if previous session ended
-        local last_lines=$(tail -10 "$log_file" 2>/dev/null)
-        if echo "$last_lines" | grep -q "# Session ended at"; then
-            # Previous session ended cleanly, start completely fresh
-            > "$log_file"
-        else
-            # Previous session might still be active or ended unexpectedly
-            # Check if there are any active processes for this TTY
-            local active_processes=$(ps -t "$tty_name" 2>/dev/null | wc -l)
-            if [[ $active_processes -le 2 ]]; then
-                # Only shell process, safe to clear
-                > "$log_file"
-            else
-                # There might be active processes, append separator
-                {
-                    echo ""
-                    echo "# =============================================="
-                    echo "# Previous session may have ended unexpectedly"
-                    echo "# New session starting at $(date '+%Y-%m-%d %H:%M:%S')"
-                    echo "# =============================================="
-                    echo ""
-                } >> "$log_file" 2>/dev/null
-            fi
-        fi
-    fi
-}
-
-# Function to clear current session log
+# Clear current log
 aixterm_clear_log() {
     local log_file=$(_aixterm_get_log_file)
     if [[ -f "$log_file" ]]; then
         > "$log_file"
-        echo "# Log cleared at $(date '+%Y-%m-%d %H:%M:%S')" >> "$log_file"
-        echo "Current session log cleared."
+        echo "Log cleared: $log_file"
     else
-        echo "No current session log to clear."
+        echo "No log file to clear."
     fi
 }
 
-# Skip initialization if already loaded (but functions above are always defined)
-[[ -n "$_AIXTERM_INTEGRATION_LOADED" ]] && return
-
-# Function to log commands with optional output capture
-_aixterm_log_command() {
-    # Only log if we have BASH_COMMAND and it's not an internal command
-    if [[ -n "$BASH_COMMAND" ]] && [[ "$BASH_COMMAND" != *"_aixterm_"* ]] && \\
-       [[ "$BASH_COMMAND" != *"aixterm"* ]] && [[ "$BASH_COMMAND" != "trap"* ]] && \\
-       [[ "$BASH_COMMAND" != "history"* ]] && \\
-       [[ "$BASH_COMMAND" != "PROMPT_COMMAND"* ]] && \\
-       [[ "$BASH_COMMAND" != *"__vsc_"* ]] && [[ "$BASH_COMMAND" != *"VSCODE"* ]] && \\
-       [[ "$BASH_COMMAND" != "builtin "* ]] && [[ "$BASH_COMMAND" != "unset "* ]] && \\
-       [[ "$BASH_COMMAND" != "export _AIXTERM_"* ]] && \\
-       [[ "$BASH_COMMAND" != "["* ]] && \\
-       [[ "$BASH_COMMAND" != "[["* ]] && [[ "$BASH_COMMAND" != "echo #"* ]]; then
-        local log_file=$(_aixterm_get_log_file)
-        local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-
-        # Log command with metadata
-        {
-            echo "# Command at $timestamp on $(tty 2>/dev/null || \\
-                  echo 'unknown'): $BASH_COMMAND"
-        } >> "$log_file" 2>/dev/null
-
-        # Store last command for exit code logging
-        export _AIXTERM_LAST_COMMAND="$BASH_COMMAND"
-    fi
-}
-
-# Function to capture command output using a wrapper (for explicit use)
-log_with_output() {
-    local cmd="$*"
+# Enhanced ai function
+ai() {
     local log_file=$(_aixterm_get_log_file)
-    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
-    local temp_output=$(mktemp)
 
-    # Log the command
+    # Log the command (works in both script and non-script sessions)
     {
-        echo "# Command with output capture at $timestamp: $cmd"
+        echo "# AI command: $(date)"
+        echo "$ ai $*"
     } >> "$log_file" 2>/dev/null
 
-    # Execute command and capture output
-    eval "$cmd" 2>&1 | tee "$temp_output"
-    local exit_code=${PIPESTATUS[0]}
+    # Run aixterm
+    command aixterm "$@"
+}
 
-    # Log the output
+# Mark as loaded and export environment variables
+export _AIXTERM_LOADED=1
+
+# Always export the environment variables if they exist
+[[ -n "$_AIXTERM_LOG_FILE" ]] && export _AIXTERM_LOG_FILE
+[[ -n "$_AIXTERM_ORIGINAL_TTY" ]] && export _AIXTERM_ORIGINAL_TTY
+[[ -n "$_AIXTERM_IN_SCRIPT" ]] && export _AIXTERM_IN_SCRIPT
+
+# Only auto-start if not already in a script session and not already auto-started
+if command -v script >/dev/null 2>&1 && [[ -z "$_AIXTERM_IN_SCRIPT" ]] && [[ -z "$_AIXTERM_AUTO_STARTED" ]]; then
+    auto_log_file=$(_aixterm_get_log_file)
+
+    echo "AIxTerm: Starting full session logging..."
+    echo "All terminal activity will be logged to: $auto_log_file"
+
+    # Add session header
     {
-        echo "# Output:"
-        cat "$temp_output"
-        echo "# Exit code: $exit_code"
-        echo ""
-    } >> "$log_file" 2>/dev/null
+        echo "# ========================================"
+        echo "# AIxTerm session started: $(date)"
+        echo "# Original TTY: $(tty 2>/dev/null || echo 'unknown')"
+        echo "# Auto-started full logging with script"
+        echo "# ========================================"
+    } >> "$auto_log_file" 2>/dev/null
 
-    # Clean up
-    rm -f "$temp_output"
+    # Mark that we're starting the script session
+    export _AIXTERM_AUTO_STARTED=1
 
-    return $exit_code
-}
-
-# Post-command function to capture exit codes
-_aixterm_post_command() {
-    local exit_code=$?
-    local log_file=$(_aixterm_get_log_file)
-
-    # Log exit code for the previous command
-    if [[ -n "$_AIXTERM_LAST_COMMAND" ]] && \\
-       [[ "$_AIXTERM_LAST_COMMAND" != *"_aixterm_"* ]]; then
-        {
-            echo "# Exit code: $exit_code"
-            echo ""
-        } >> "$log_file" 2>/dev/null
-    fi
-
-    # Clear the last command
-    unset _AIXTERM_LAST_COMMAND
-
-    return $exit_code
-}
-
-# Function to enable full output logging for current session (experimental)
-aixterm_enable_full_logging() {
-    echo "Enabling experimental full output logging..."
-    echo "This will capture all command output in addition to commands."
-    echo "Note: This is experimental and may affect shell performance."
-
-    # Use script command in a clean way
-    local log_file=$(_aixterm_get_log_file)
-    echo "# Full output logging enabled at $(date '+%Y-%m-%d %H:%M:%S')" >> "$log_file"
-
-    # Start a new shell session with script logging
-    exec script -a -f "$log_file.full" -c "$SHELL"
-}
-
-# Session cleanup function
-_aixterm_cleanup_session() {
-    local log_file=$(_aixterm_get_log_file)
-    if [[ -n "$log_file" ]] && [[ -f "$log_file" ]]; then
-        {
-            echo "# Session ended at $(date '+%Y-%m-%d %H:%M:%S')"
-            echo ""
-        } >> "$log_file" 2>/dev/null
-    fi
-
-    # Clean up any temporary files
-    rm -f /tmp/.aixterm_* 2>/dev/null
-
-    # Kill any lingering tee processes (cleanup from previous problematic versions)
-    pkill -f "tee.*aixterm_log" 2>/dev/null || true
-}
-
-# Set up logging
-trap '_aixterm_log_command' DEBUG
-trap '_aixterm_cleanup_session' EXIT
-
-# Set up PROMPT_COMMAND for exit code capture
-if [[ -z "$PROMPT_COMMAND" ]]; then
-    PROMPT_COMMAND="_aixterm_post_command"
+    # Start script session with all necessary environment variables
+    export _AIXTERM_IN_SCRIPT=1
+    export _AIXTERM_LOG_FILE="$auto_log_file"
+    export _AIXTERM_ORIGINAL_TTY="$(tty 2>/dev/null | sed 's|/dev/||g' | tr '/' '-')"
+    exec script -a -f "$auto_log_file" -c "bash -i"
+elif [[ -n "$_AIXTERM_IN_SCRIPT" ]]; then
+    echo "AIxTerm: Integration loaded in script session. Use 'aixterm_status' for info."
 else
-    PROMPT_COMMAND="_aixterm_post_command; $PROMPT_COMMAND"
+    echo "AIxTerm: Integration loaded. Use 'aixterm_status' for info."
 fi
-
-# Initialize fresh log session
-_aixterm_init_fresh_log
-
-# Log session start
-{
-    echo "# AIxTerm session started at $(date '+%Y-%m-%d %H:%M:%S')"
-    echo "# TTY: $(tty 2>/dev/null || echo 'unknown')"
-    echo "# PID: $$"
-    echo "# Command logging active (use 'log_with_output <cmd>' for output capture)"
-    echo "# Use 'aixterm_enable_full_logging' for experimental full output logging"
-    echo ""
-} >> "$(_aixterm_get_log_file)" 2>/dev/null
-
-# Mark integration as loaded
-export _AIXTERM_INTEGRATION_LOADED=1
 """
 
     def is_available(self) -> bool:
@@ -370,23 +293,27 @@ export _AIXTERM_INTEGRATION_LOADED=1
     def get_installation_notes(self) -> List[str]:
         """Return bash-specific installation notes."""
         return [
-            "Bash integration uses DEBUG trap for command logging",
-            "Supports both .bashrc and .bash_profile configuration files",
-            "Commands and exit codes are logged automatically",
-            "Use 'log_with_output <command>' to capture command output",
-            "Use 'aixterm_enable_full_logging' for experimental full output capture",
+            "Simplified bash integration using 'script' command for complete "
+            "terminal logging",
+            "Automatically adds integration to .bashrc (and ensures .bash_profile "
+            "sources .bashrc)",
+            "Use 'aixterm_start_logging' to begin full terminal session capture",
+            "Use 'aixterm_status' to check integration and log file status",
             "Integration is only active in interactive shells",
-            "Use 'aixterm_status' to check integration status",
+            "Full terminal sessions (commands + output) logged with 'script' command",
+            "Basic command logging happens automatically when integration loads",
         ]
 
     def get_troubleshooting_tips(self) -> List[str]:
         """Return bash-specific troubleshooting tips."""
         return [
-            "If logging isn't working, check that DEBUG trap is enabled",
-            "Ensure $BASH_COMMAND variable is available",
-            "Check file permissions on ~/.aixterm_log.* files",
-            "Integration requires interactive shell mode ([[ $- == *i* ]])",
-            "Some bash configurations may override DEBUG trap",
-            "Use 'log_with_output <cmd>' for commands that need output capture",
-            "If shell becomes unresponsive, check for hanging tee processes",
+            "Integration requires the 'script' command (part of util-linux package)",
+            "Check that the shell is interactive ([[ $- == *i* ]])",
+            "Ensure write permissions to ~/.aixterm_log.* files",
+            "Use 'aixterm_status' to check integration and log file status",
+            "If script session is stuck, use Ctrl+D or 'exit' to end it",
+            "Full session logging uses 'exec script' which replaces the current shell",
+            "Clean up old logs with 'aixterm_cleanup_logs' if disk space is an issue",
+            "Integration loads automatically; check for conflicts with other "
+            "shell customizations",
         ]

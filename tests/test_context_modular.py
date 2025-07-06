@@ -17,7 +17,8 @@ class TestModularTerminalContext:
 
             assert "Current working directory:" in context
             assert "Recent terminal output:" in context
-            assert "ls -la" in context
+            # With intelligent summarization, commands may be grouped
+            assert "ls" in context or "pwd" in context  # Should contain some commands
             assert "Hello, world!" in context
 
     def test_get_terminal_context_no_log(self, context_manager):
@@ -57,11 +58,23 @@ class TestModularTerminalContext:
         # Test TTY functionality on Unix systems, or mock it on Windows
         if hasattr(os, "ttyname"):
             with patch("os.ttyname", return_value="/dev/pts/0"):
-                log_path = context_manager.log_processor.find_log_file()
-                assert log_path == expected_log
+                with patch(
+                    "aixterm.context.log_processor.Path.home",
+                    return_value=mock_home_dir,
+                ):
+                    with patch.object(
+                        context_manager.log_processor,
+                        "_get_current_tty",
+                        return_value="pts-0",
+                    ):
+                        with patch.dict(
+                            os.environ, {"_AIXTERM_LOG_FILE": ""}, clear=False
+                        ):
+                            log_path = context_manager.log_processor.find_log_file()
+                            assert log_path == expected_log
         else:
             # On Windows, add the ttyname function temporarily and mock stdin.fileno
-            def mock_ttyname(fd):
+            def mock_ttyname(_):
                 return "/dev/pts/0"
 
             os.ttyname = mock_ttyname

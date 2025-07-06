@@ -1,5 +1,6 @@
 """Tests for enhanced TTY validation in log processor."""
 
+import os
 import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -142,15 +143,21 @@ class TestLogProcessorTTYValidation:
 
         # Test with current TTY
         with patch.object(log_processor, "_get_current_tty", return_value="pts-1"):
-            with patch("pathlib.Path.home", return_value=mock_home_dir):
-                found_log = log_processor.find_log_file()
-                assert found_log == current_tty_log
+            with patch(
+                "aixterm.context.log_processor.Path.home", return_value=mock_home_dir
+            ):
+                with patch.dict(os.environ, {"_AIXTERM_LOG_FILE": ""}, clear=False):
+                    found_log = log_processor.find_log_file()
+                    assert found_log == current_tty_log
 
         # Test with different TTY
         with patch.object(log_processor, "_get_current_tty", return_value="pts-2"):
-            with patch("pathlib.Path.home", return_value=mock_home_dir):
-                found_log = log_processor.find_log_file()
-                assert found_log == other_tty_log
+            with patch(
+                "aixterm.context.log_processor.Path.home", return_value=mock_home_dir
+            ):
+                with patch.dict(os.environ, {"_AIXTERM_LOG_FILE": ""}, clear=False):
+                    found_log = log_processor.find_log_file()
+                    assert found_log == other_tty_log
 
     def test_tty_name_normalization(self, log_processor):
         """Test TTY name normalization for log file naming."""
@@ -197,27 +204,33 @@ class TestLogProcessorTTYValidation:
 
         # Test that find_log_file returns TTY-specific log
         with patch.object(log_processor, "_get_current_tty", return_value="pts-1"):
-            with patch("pathlib.Path.home", return_value=mock_home_dir):
-                log_file = log_processor.find_log_file()
-                assert log_file == pts1_log
-                # Test reading the log content
-                content = log_processor.read_and_process_log(
-                    log_file, 1000, "test-model", False
-                )
-                assert "TTY 1 commands" in content
-                assert "TTY 2 commands" not in content
+            with patch(
+                "aixterm.context.log_processor.Path.home", return_value=mock_home_dir
+            ):
+                with patch.dict(os.environ, {"_AIXTERM_LOG_FILE": ""}, clear=False):
+                    log_file = log_processor.find_log_file()
+                    assert log_file == pts1_log
+                    # Test reading the log content
+                    content = log_processor.read_and_process_log(
+                        log_file, 1000, "test-model", False
+                    )
+                    assert "TTY 1 commands" in content
+                    assert "TTY 2 commands" not in content
 
         # Test context from TTY 2
         with patch.object(log_processor, "_get_current_tty", return_value="pts-2"):
-            with patch("pathlib.Path.home", return_value=mock_home_dir):
-                log_file = log_processor.find_log_file()
-                assert log_file == pts2_log
-                # Test reading the log content
-                content = log_processor.read_and_process_log(
-                    log_file, 1000, "test-model", False
-                )
-                assert "TTY 2 commands" in content
-                assert "TTY 1 commands" not in content
+            with patch(
+                "aixterm.context.log_processor.Path.home", return_value=mock_home_dir
+            ):
+                with patch.dict(os.environ, {"_AIXTERM_LOG_FILE": ""}, clear=False):
+                    log_file = log_processor.find_log_file()
+                    assert log_file == pts2_log
+                    # Test reading the log content
+                    content = log_processor.read_and_process_log(
+                        log_file, 1000, "test-model", False
+                    )
+                    assert "TTY 2 commands" in content
+                    assert "TTY 1 commands" not in content
 
     def test_log_entry_creation_tty_specific(self, log_processor, mock_home_dir):
         """Test that log entries are created in TTY-specific files."""
@@ -255,9 +268,12 @@ class TestLogProcessorTTYValidation:
 
         # When no TTY is available, should use default log
         with patch.object(log_processor, "_get_current_tty", return_value=None):
-            with patch("pathlib.Path.home", return_value=mock_home_dir):
-                found_log = log_processor.find_log_file()
-                assert found_log == default_log
+            with patch(
+                "aixterm.context.log_processor.Path.home", return_value=mock_home_dir
+            ):
+                with patch.dict(os.environ, {"_AIXTERM_LOG_FILE": ""}, clear=False):
+                    found_log = log_processor.find_log_file()
+                    assert found_log == default_log
 
                 # Test reading the content
                 content = log_processor.read_and_process_log(
@@ -286,31 +302,39 @@ class TestLogProcessorTTYValidation:
         # Create log entries for each session
         for tty, commands in sessions.items():
             with patch.object(log_processor, "_get_current_tty", return_value=tty):
-                with patch("pathlib.Path.home", return_value=mock_home_dir):
-                    for command, output in commands:
-                        log_processor.create_log_entry(command, output)
+                with patch(
+                    "aixterm.context.log_processor.Path.home",
+                    return_value=mock_home_dir,
+                ):
+                    with patch.dict(os.environ, {"_AIXTERM_LOG_FILE": ""}, clear=False):
+                        for command, output in commands:
+                            log_processor.create_log_entry(command, output)
 
         # Verify each session sees only its own context
         for tty, commands in sessions.items():
             with patch.object(log_processor, "_get_current_tty", return_value=tty):
-                with patch("pathlib.Path.home", return_value=mock_home_dir):
-                    log_file = log_processor.find_log_file()
-                    assert log_file is not None
-                    context = log_processor.read_and_process_log(
-                        log_file, 1000, "test-model", False
-                    )
+                with patch(
+                    "aixterm.context.log_processor.Path.home",
+                    return_value=mock_home_dir,
+                ):
+                    with patch.dict(os.environ, {"_AIXTERM_LOG_FILE": ""}, clear=False):
+                        log_file = log_processor.find_log_file()
+                        assert log_file is not None
+                        context = log_processor.read_and_process_log(
+                            log_file, 1000, "test-model", False
+                        )
 
-                    # Should contain own commands
-                    for command, output in commands:
-                        assert command in context
-                        assert output in context
+                        # Should contain own commands
+                        for command, output in commands:
+                            assert command in context
+                            assert output in context
 
-                    # Should not contain other sessions' commands
-                    for other_tty, other_commands in sessions.items():
-                        if other_tty != tty:
-                            for other_command, other_output in other_commands:
-                                assert other_command not in context
-                                assert other_output not in context
+                        # Should not contain other sessions' commands
+                        for other_tty, other_commands in sessions.items():
+                            if other_tty != tty:
+                                for other_command, other_output in other_commands:
+                                    assert other_command not in context
+                                    assert other_output not in context
 
     def test_edge_cases_tty_detection(self, log_processor):
         """Test edge cases in TTY detection."""

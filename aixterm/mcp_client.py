@@ -529,32 +529,6 @@ class MCPServer:
         except Exception as e:
             self.logger.error(f"Error stopping MCP server: {e}")
 
-    async def _cleanup_session(self) -> None:
-        """Clean up MCP session asynchronously."""
-        # Note: We need to be careful about context manager cleanup.
-        # The safest approach is to let the context managers clean up themselves
-        # and just set our references to None.
-
-        try:
-            # Just clear our references - let the context managers handle
-            # their own cleanup when they go out of scope or when the event
-            # loop shuts down
-            if self._session:
-                # Don't explicitly call __aexit__ as it may be in a different task
-                # context
-                self._session = None
-
-            if self._client_context:
-                # Don't explicitly call __aexit__ as it may be in a different task
-                # context
-                self._client_context = None
-
-        except Exception as e:
-            self.logger.debug(f"Error during session cleanup: {e}")
-
-        # Note: The actual cleanup will happen when the context managers
-        # are garbage collected or when the event loop shuts down
-
     async def _cleanup_session_safely(self) -> None:
         """Clean up session safely, checking if we're in the right task context."""
         try:

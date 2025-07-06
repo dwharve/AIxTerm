@@ -162,9 +162,8 @@ class TestBash:
         # Check for key components
         assert "# AIxTerm Shell Integration" in script
         assert "_aixterm_get_log_file" in script
-        assert "_aixterm_log_command" in script
-        assert "trap" in script  # bash-specific
-        assert "DEBUG" in script  # bash-specific
+        assert "script -a -f" in script  # Check for script command usage
+        assert "aixterm_status" in script  # bash-specific function
 
     def test_is_available(self):
         """Test bash availability check."""
@@ -186,7 +185,7 @@ class TestBash:
         notes = integration.get_installation_notes()
         assert isinstance(notes, list)
         assert len(notes) > 0
-        assert any("DEBUG trap" in note for note in notes)
+        assert any("'script' command" in note for note in notes)
 
     def test_troubleshooting_tips(self):
         """Test bash troubleshooting tips."""
@@ -194,7 +193,7 @@ class TestBash:
         tips = integration.get_troubleshooting_tips()
         assert isinstance(tips, list)
         assert len(tips) > 0
-        assert any("DEBUG trap" in tip for tip in tips)
+        assert any("'script' command" in tip for tip in tips)
 
 
 class TestZsh:

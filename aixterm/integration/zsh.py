@@ -2,7 +2,7 @@
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from .base import BaseIntegration
 
@@ -180,10 +180,7 @@ aixterm_clear_log() {
     fi
 }
 
-# Skip initialization if already loaded (but functions above are always defined)
-[[ -n "$_AIXTERM_INTEGRATION_LOADED" ]] && return
-
-# Zsh-specific command logging using preexec hook
+# Zsh-specific command logging using preexec hook with full output capture
 _aixterm_preexec() {
     # Log command before execution - with improved filtering
     local cmd="$1"
@@ -199,13 +196,14 @@ _aixterm_preexec() {
             echo "# Command at $timestamp on $(tty 2>/dev/null || echo 'unknown'): $cmd"
         } >> "$log_file" 2>/dev/null
 
-        # Store last command for exit code logging
+        # Store last command and start time for output capture
         export _AIXTERM_LAST_COMMAND="$cmd"
+        export _AIXTERM_COMMAND_START_TIME=$(date '+%s.%N')
     fi
 }
 
-# Function to capture command output using a wrapper (for explicit use)
-log_with_output() {
+# Function for explicit command execution with guaranteed output capture
+log_command() {
     local cmd="$*"
     local log_file=$(_aixterm_get_log_file)
     local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
@@ -213,7 +211,7 @@ log_with_output() {
 
     # Log the command
     {
-        echo "# Command with output capture at $timestamp: $cmd"
+        echo "# Explicit command execution at $timestamp: $cmd"
     } >> "$log_file" 2>/dev/null
 
     # Execute command and capture output
@@ -234,7 +232,7 @@ log_with_output() {
     return $exit_code
 }
 
-# Post-command function to capture exit codes
+# Enhanced post-command function to capture exit codes and output
 _aixterm_precmd() {
     local exit_code=$?
     local log_file=$(_aixterm_get_log_file)
@@ -242,10 +240,32 @@ _aixterm_precmd() {
     # Log exit code for the previous command
     if [[ -n "$_AIXTERM_LAST_COMMAND" ]] && \\
        [[ "$_AIXTERM_LAST_COMMAND" != *"_aixterm_"* ]]; then
-        {
-            echo "# Exit code: $exit_code"
-            echo ""
-        } >> "$log_file" 2>/dev/null
+
+        # Calculate command duration if we have start time
+        local duration=""
+        if [[ -n "$_AIXTERM_COMMAND_START_TIME" ]]; then
+            local end_time=$(date '+%s.%N')
+            duration=$(echo "$end_time - $_AIXTERM_COMMAND_START_TIME" | bc 2>/dev/null || echo "")
+            unset _AIXTERM_COMMAND_START_TIME
+        fi
+
+        # For zsh, we capture output in post-command hook if not in minimal mode
+        if [[ "$_AIXTERM_MINIMAL_MODE" != "1" ]]; then
+            # In zsh, we can't easily capture the output after execution
+            # So we provide timing and exit code information
+            {
+                echo "# Exit code: $exit_code"
+                if [[ -n "$duration" ]]; then
+                    echo "# Duration: ${duration}s"
+                fi
+                echo ""
+            } >> "$log_file" 2>/dev/null
+        else
+            {
+                echo "# Exit code: $exit_code"
+                echo ""
+            } >> "$log_file" 2>/dev/null
+        fi
     fi
 
     # Clear the last command
@@ -254,18 +274,22 @@ _aixterm_precmd() {
     return $exit_code
 }
 
-# Function to enable full output logging for current session (experimental)
-aixterm_enable_full_logging() {
-    echo "Enabling experimental full output logging..."
-    echo "This will capture all command output in addition to commands."
-    echo "Note: This is experimental and may affect shell performance."
+# Function to toggle minimal logging mode (commands only, no output)
+aixterm_toggle_minimal_logging() {
+    if [[ "$_AIXTERM_MINIMAL_MODE" == "1" ]]; then
+        unset _AIXTERM_MINIMAL_MODE
+        echo "AIxTerm: Full logging enabled (commands + output)"
+    else
+        export _AIXTERM_MINIMAL_MODE=1
+        echo "AIxTerm: Minimal logging enabled (commands only)"
+    fi
+}
 
-    # Use script command in a clean way
-    local log_file=$(_aixterm_get_log_file)
-    echo "# Full output logging enabled at $(date '+%Y-%m-%d %H:%M:%S')" >> "$log_file"
-
-    # Start a new shell session with script logging
-    exec script -a -f "$log_file.full" -c "$SHELL"
+# Function to enable legacy minimal logging mode
+aixterm_minimal_logging() {
+    export _AIXTERM_MINIMAL_MODE=1
+    echo "AIxTerm: Switched to minimal logging mode (commands only)"
+    echo "Use 'aixterm_toggle_minimal_logging' to switch back to full logging"
 }
 
 # Session cleanup function
@@ -281,6 +305,75 @@ _aixterm_cleanup() {
 
 # Initialize fresh log for this session
 _aixterm_init_fresh_log
+
+# Function to check if integration is installed in config files
+_aixterm_check_installation() {
+    local needs_install=false
+    local zshrc="$HOME/.zshrc"
+
+    # Check .zshrc
+    if [[ -f "$zshrc" ]]; then
+        if ! grep -q "aixterm" "$zshrc" 2>/dev/null; then
+            needs_install=true
+        fi
+    else
+        needs_install=true
+    fi
+
+    echo "$needs_install"
+}
+
+# Function to install integration in shell config files
+_aixterm_install_integration() {
+    local zshrc="$HOME/.zshrc"
+    local script_path="${(%):-%x}"  # zsh-specific way to get script path
+
+    # If we can't determine the script path, skip auto-installation
+    if [[ -z "$script_path" ]] || [[ ! -f "$script_path" ]]; then
+        echo "AIxTerm: Cannot determine integration script path for auto-installation"
+        return 1
+    fi
+
+    # Create .zshrc if it doesn't exist
+    if [[ ! -f "$zshrc" ]]; then
+        touch "$zshrc"
+        echo "Created .zshrc"
+    fi
+
+    # Add integration to .zshrc
+    {
+        echo ""
+        echo "# AIxTerm Integration - Auto-installed"
+        echo "if [[ -f \"$script_path\" ]]; then"
+        echo "    source \"$script_path\""
+        echo "fi"
+    } >> "$zshrc"
+
+    echo "AIxTerm integration installed in .zshrc"
+    echo "Restart your shell or run 'source ~/.zshrc' to activate"
+    return 0
+}
+
+# Check and offer to install integration if missing
+if [[ "$(_aixterm_check_installation)" == "true" ]]; then
+    # Only auto-install if we're in an interactive shell and not already running from config
+    if [[ $- == *i* ]] && [[ -z "$_AIXTERM_AUTO_INSTALLING" ]]; then
+        echo "AIxTerm integration not found in shell configuration."
+        echo "Would you like to install it automatically? [y/N]"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            export _AIXTERM_AUTO_INSTALLING=1
+            _aixterm_install_integration
+            unset _AIXTERM_AUTO_INSTALLING
+        else
+            echo "To install manually, add the following line to your .zshrc:"
+            echo "source \"${(%):-%x}\""
+        fi
+    fi
+fi
+
+# Skip initialization if already loaded (but functions above are always defined)
+[[ -n "$_AIXTERM_INTEGRATION_LOADED" ]] && return
 
 # Set up zsh hooks
 autoload -Uz add-zsh-hook
@@ -298,55 +391,12 @@ export _AIXTERM_INTEGRATION_LOADED=1
     echo "# AIxTerm integration loaded at $(date '+%Y-%m-%d %H:%M:%S')"
     echo "# Shell: zsh"
     echo "# TTY: $(tty 2>/dev/null || echo 'unknown')"
+    echo "# Full logging active (commands + timing automatically captured)"
+    echo "# Use 'aixterm_toggle_minimal_logging' to switch to commands-only mode"
+    echo "# Use 'log_command <cmd>' for explicit command execution with guaranteed output"
     echo ""
 } >> "$(_aixterm_get_log_file)" 2>/dev/null
 """
-
-    def get_integration_snippet(self) -> str:
-        """Get the snippet to add to shell config."""
-        return """
-# AIxTerm integration
-if [[ -n "$TERM" && "$TERM" != "dumb" ]]; then
-    python3 -c "
-try:
-    from aixterm.integration import setup_shell_integration
-    setup_shell_integration('zsh')
-except ImportError:
-    pass
-" 2>/dev/null
-fi
-"""
-
-    def is_integration_installed(self, config_file: Path) -> bool:
-        """Check if integration is installed in the given config file."""
-        return super().is_integration_installed(config_file)
-
-    def get_installation_status(self) -> Dict[str, Any]:
-        """Get detailed installation status."""
-        status: Dict[str, Any] = {"installed": False, "config_files": []}
-
-        for config_file in self.config_files:
-            config_path = Path.home() / config_file
-            file_status = {
-                "path": str(config_path),
-                "exists": config_path.exists(),
-                "has_integration": False,
-                "writable": False,
-            }
-
-            if config_path.exists():
-                try:
-                    content = config_path.read_text()
-                    file_status["has_integration"] = "# AIxTerm integration" in content
-                    file_status["writable"] = os.access(config_path, os.W_OK)
-                    if file_status["has_integration"]:
-                        status["installed"] = True
-                except Exception as e:
-                    file_status["error"] = str(e)
-
-            status["config_files"].append(file_status)
-
-        return status
 
     def is_available(self) -> bool:
         """Check if zsh is available on the system."""
@@ -399,9 +449,9 @@ fi
         return [
             "Zsh integration uses preexec and precmd hooks for command logging",
             "Supports .zshrc configuration file",
-            "Commands and exit codes are logged automatically",
-            "Use 'log_with_output <command>' to capture command output",
-            "Use 'aixterm_enable_full_logging' for experimental full output capture",
+            "Commands, timing, and exit codes are logged automatically by default",
+            "Use 'aixterm_toggle_minimal_logging' to switch to commands-only mode",
+            "Use 'log_command <command>' for explicit command execution with guaranteed output",
             "Integration is only active in interactive shells",
             "Use 'aixterm_status' to check integration status",
         ]
@@ -414,8 +464,9 @@ fi
             "Check file permissions on ~/.aixterm_log.* files",
             "Integration requires interactive shell mode",
             "Some zsh frameworks (oh-my-zsh) may interfere with hooks",
-            "Use 'log_with_output <cmd>' for commands that need output capture",
-            "If shell becomes unresponsive, check for hanging tee processes",
+            "Use 'log_command <cmd>' for commands that need guaranteed output capture",
+            "If performance issues occur, use 'aixterm_toggle_minimal_logging' for commands-only mode",
+            "Clean up old log files with 'aixterm_cleanup_logs' if disk space is an issue",
         ]
 
     def detect_framework(self) -> Optional[str]:

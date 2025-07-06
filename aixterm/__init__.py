@@ -6,7 +6,7 @@ based on your terminal context, with support for Model Context Protocol
 (MCP) servers.
 """
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 __author__ = "AIxTerm Team"
 
 from .cleanup import CleanupManager

@@ -20,7 +20,7 @@ if requirements_file.exists():
 
 setup(
     name="aixterm",
-    version="0.1.3",
+    version="0.1.4",
     author="David Harvey",
     author_email="dwh.exis@gmail.com",
     description="Terminal AI assistant with MCP support",

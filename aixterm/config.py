@@ -542,24 +542,6 @@ class AIxTermConfig:
         port: int = self.get_server_mode_config().get("port", 8081)
         return port
 
-    def get_server_transport(self) -> str:
-        """Get server transport protocol.
-
-        Returns:
-            Server transport protocol
-        """
-        transport: str = self.get_server_mode_config().get("transport", "http")
-        return transport
-
-    def is_server_keep_alive_enabled(self) -> bool:
-        """Check if server keep alive is enabled.
-
-        Returns:
-            True if server should keep running after requests
-        """
-        keep_alive: bool = self.get_server_mode_config().get("keep_alive", True)
-        return keep_alive
-
     def create_default_config(self, overwrite: bool = False) -> bool:
         """Create a default configuration file.
 
@@ -638,37 +620,8 @@ class AIxTermConfig:
             # Update the config
             self.set("tool_management.response_timing.average_response_time", new_avg)
 
-            # Optionally save to persist across runs
-            if hasattr(self, "_auto_save_timing") and self._auto_save_timing:
-                self.save()
-
         except Exception as e:
             self.logger.debug(f"Error updating response timing: {e}")
-
-    def enable_auto_save_timing(self, enabled: bool = True) -> None:
-        """Enable automatic saving of timing updates.
-
-        Args:
-            enabled: Whether to auto-save timing updates to config file
-        """
-        self._auto_save_timing = enabled
-
-    def get_response_timing_stats(self) -> Dict[str, Any]:
-        """Get current response timing statistics.
-
-        Returns:
-            Dictionary with timing statistics
-        """
-        timing_config = self.get("tool_management.response_timing", {})
-        return {
-            "average_response_time": timing_config.get("average_response_time", 10.0),
-            "max_progress_time": timing_config.get("max_progress_time", 30.0),
-            "progress_update_interval": timing_config.get(
-                "progress_update_interval", 0.5
-            ),
-            "auto_save_enabled": getattr(self, "_auto_save_timing", False),
-            "timing_initialized": getattr(self, "_timing_initialized", False),
-        }
 
     @property
     def config(self) -> Dict[str, Any]:

@@ -421,7 +421,6 @@ class TqdmProgress(ProgressInterface):
 
                         # Close without leaving a newline - this is key to prevent
                         # the line spacing issue
-                        self._tqdm.leave = False
                         self._tqdm.close()
 
                         # Now write the final progress line manually without a newline

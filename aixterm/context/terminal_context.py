@@ -24,9 +24,11 @@ class TerminalContext:
         self.logger = get_logger(__name__)
 
         # Initialize component handlers
-        self.directory_handler = DirectoryHandler(config_manager, self.logger)
-        self.log_processor = LogProcessor(config_manager, self.logger)
         self.token_manager = TokenManager(config_manager, self.logger)
+        self.directory_handler = DirectoryHandler(
+            config_manager, self.logger, self.token_manager
+        )
+        self.log_processor = LogProcessor(config_manager, self.logger)
         self.tool_optimizer = ToolOptimizer(
             config_manager, self.logger, self.token_manager
         )
@@ -75,16 +77,25 @@ class TerminalContext:
 
         return "\n\n".join(context_parts)
 
-    def get_file_contexts(self, file_paths: List[str]) -> str:
+    def get_file_contexts(
+        self,
+        file_paths: List[str],
+        max_file_tokens: int = 1000,
+        max_total_tokens: int = 3000,
+    ) -> str:
         """Get content from multiple files to use as context.
 
         Args:
             file_paths: List of file paths to read
+            max_file_tokens: Maximum tokens per individual file
+            max_total_tokens: Maximum total tokens for all file content
 
         Returns:
             Formatted string containing file contents
         """
-        return self.directory_handler.get_file_contexts(file_paths)
+        return self.directory_handler.get_file_contexts(
+            file_paths, max_file_tokens, max_total_tokens
+        )
 
     def get_optimized_context(
         self, file_contexts: Optional[List[str]] = None, query: str = ""
@@ -130,11 +141,14 @@ class TerminalContext:
         # 3. File contexts if provided - 40-60% of budget (prioritized)
         if file_contexts and remaining_tokens > 100:
             file_budget = min(int(available_for_context * 0.6), remaining_tokens)
-            file_content = self.directory_handler.get_file_contexts(file_contexts)
+            # Use token-aware file context method directly
+            max_file_tokens = min(
+                1500, file_budget // max(1, len(file_contexts))
+            )  # Distribute per file
+            file_content = self.directory_handler.get_file_contexts(
+                file_contexts, max_file_tokens, file_budget
+            )
             if file_content:
-                file_content = self.token_manager.apply_token_limit(
-                    file_content, file_budget, self.config.get("model", "")
-                )
                 context_parts.append(file_content)
                 remaining_tokens -= self.token_manager.estimate_tokens(file_content)
 
@@ -151,32 +165,17 @@ class TerminalContext:
             try:
                 log_path = self.log_processor.find_log_file()
                 if log_path and log_path.exists():
-                    # Read raw log content
-                    with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
-                        f.seek(0, 2)  # Seek to end
-                        file_size = f.tell()
-                        read_size = min(file_size, 30000)  # Read last 30KB
-                        f.seek(file_size - read_size)
-                        raw_log = f.read()
-
-                    # Get clean terminal context (without AI conversations)
-                    clean_context = (
-                        self.log_processor.get_terminal_context_without_conversations(
-                            raw_log
-                        )
+                    # Use intelligent summarization for consistency
+                    log_content = self.log_processor.read_and_process_log(
+                        log_path,
+                        terminal_budget,
+                        self.config.get("model", ""),
+                        smart_summarize=True,
                     )
-
-                    if clean_context:
-                        # Apply token limit to the clean context
-                        log_content = self.token_manager.apply_token_limit(
-                            clean_context,
-                            terminal_budget,
-                            self.config.get("model", ""),
+                    if log_content and log_content.strip():
+                        context_parts.append(
+                            f"Recent terminal activity:\n{log_content}"
                         )
-                        if log_content.strip():
-                            context_parts.append(
-                                f"Recent terminal activity:\n{log_content}"
-                            )
                     else:
                         context_parts.append("No recent terminal activity available.")
                 else:

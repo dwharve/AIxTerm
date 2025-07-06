@@ -25,6 +25,14 @@ class LogProcessor:
         Returns:
             Path to log file or None if not found
         """
+        # First, check if we're in a script session with an active log file
+        active_log_env = os.environ.get("_AIXTERM_LOG_FILE")
+        if active_log_env:
+            active_log_path = Path(active_log_env)
+            if active_log_path.exists():
+                self.logger.debug(f"Using active session log file: {active_log_path}")
+                return active_log_path
+
         current_tty = self._get_current_tty()
         if current_tty:
             # Strict TTY matching - only use logs from the exact same TTY
@@ -162,62 +170,6 @@ class LogProcessor:
         self.logger.debug(f"Found {len(matching_logs)} logs for TTY {current_tty}")
         return matching_logs
 
-    def get_active_session_logs(self) -> List[Path]:
-        """Get log files from currently active TTY sessions.
-
-        Returns:
-            List of log file paths from active sessions
-        """
-        try:
-            active_ttys = self._get_active_ttys()
-            active_logs = []
-
-            for log_file in Path.home().glob(".aixterm_log.*"):
-                tty_name = self._extract_tty_from_log_path(log_file)
-                if tty_name and tty_name in active_ttys:
-                    active_logs.append(log_file)
-
-            self.logger.debug(f"Found {len(active_logs)} logs from active sessions")
-            return active_logs
-
-        except Exception as e:
-            self.logger.error(f"Error getting active session logs: {e}")
-            # Fallback to current TTY logs
-            return self.get_tty_specific_logs()
-
-    def prioritize_logs_by_activity(self, logs: List[Path]) -> List[Path]:
-        """Prioritize log files with active sessions first.
-
-        Args:
-            logs: List of log file paths
-
-        Returns:
-            Sorted list with active session logs first
-        """
-        try:
-            active_ttys = self._get_active_ttys()
-            active_logs = []
-            inactive_logs = []
-
-            for log_file in logs:
-                tty_name = self._extract_tty_from_log_path(log_file)
-                if tty_name and tty_name in active_ttys:
-                    active_logs.append(log_file)
-                else:
-                    inactive_logs.append(log_file)
-
-            # Sort each group by modification time (most recent first)
-            active_logs.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-            inactive_logs.sort(key=lambda f: f.stat().st_mtime, reverse=True)
-
-            # Return active logs first, then inactive
-            return active_logs + inactive_logs
-
-        except Exception as e:
-            self.logger.error(f"Error prioritizing logs: {e}")
-            # Fallback to simple time-based sorting
-            return sorted(logs, key=lambda f: f.stat().st_mtime, reverse=True)
-
     def _get_active_ttys(self) -> List[str]:
         """Get list of currently active TTY sessions.
 
@@ -266,36 +218,39 @@ class LogProcessor:
         log_path: Path,
         max_tokens: int,
         model_name: str,
-        smart_summarize: bool,
+        smart_summarize: bool = True,
     ) -> str:
-        """Read and intelligently process log file content.
+        """Read and intelligently process log file content with tiered summarization.
 
         Args:
             log_path: Path to log file
             max_tokens: Maximum number of tokens to include
             model_name: Name of the model for tokenization
             smart_summarize: Whether to apply intelligent summarization
+                (always True for optimal results)
 
         Returns:
-            Processed log content
+            Processed log content with tiered detail levels
         """
         try:
-            # Read the full log
+            # Apply file size management BEFORE reading to avoid processing huge files
+            self._manage_log_file_size(log_path)
+
+            # Read the managed (truncated) log
             with open(log_path, "r", encoding="utf-8") as f:
                 full_text = f.read()
 
             if not full_text.strip():
-                return ""
+                return "No terminal activity recorded yet."
 
-            # If smart summarization is disabled, use the old method
-            if not smart_summarize:
-                return self._read_and_truncate_log(log_path, max_tokens, model_name)
-
-            # Apply intelligent processing
-            processed_content = self._intelligently_summarize_log(
-                full_text, max_tokens, model_name
-            )
-            return processed_content
+            # Always use intelligent tiered summarization for optimal context management
+            if smart_summarize:
+                return self._intelligently_summarize_log(
+                    full_text, max_tokens, model_name
+                )
+            else:
+                # Fallback to simple token-based truncation only if explicitly requested
+                return self._apply_token_limit(full_text, max_tokens, model_name)
 
         except Exception as e:
             self.logger.error(f"Error processing log file: {e}")
@@ -304,7 +259,11 @@ class LogProcessor:
     def _intelligently_summarize_log(
         self, content: str, max_tokens: int, model_name: str
     ) -> str:
-        """Apply intelligent summarization to log content.
+        """Apply tiered intelligent summarization to log content.
+
+        Recent data gets full detail, older data gets increasingly
+        generalized to optimize context size while preserving important
+        information.
 
         Args:
             content: Full log content
@@ -312,25 +271,64 @@ class LogProcessor:
             model_name: Model name for tokenization
 
         Returns:
-            Intelligently summarized content
+            Intelligently summarized content with tiered detail levels
         """
         lines = content.strip().split("\n")
         if not lines:
             return ""
 
-        # Categorize content
+        # Parse all commands and categorize content
+        commands, errors = self._parse_commands_and_errors(lines)
+
+        if not commands:
+            return "No commands found in session."
+
+        # Apply tiered summarization based on recency
+        summary_parts = self._build_tiered_summary(commands, errors)
+
+        result = "\n".join(summary_parts)
+
+        # Apply token-based truncation if still too long
+        return self._apply_token_limit(result, max_tokens, model_name)
+
+    def _parse_commands_and_errors(
+        self, lines: List[str]
+    ) -> tuple[List[tuple[str, str]], List[str]]:
+        """Parse log lines to extract commands and errors.
+
+        Args:
+            lines: Log file lines
+
+        Returns:
+            Tuple of (commands, errors) where commands is list of
+            (command, output) tuples
+        """
         commands = []
         errors = []
         current_command = None
         current_output: List[str] = []
 
         for line in lines:
-            if line.startswith("$ "):
+            # Clean ANSI escape sequences for parsing
+            clean_line = self._clean_ansi_sequences(line)
+
+            # Handle both traditional format ($ command) and
+            # script format (└──╼ $command)
+            command_match = None
+            if clean_line.startswith("$ "):
+                command_match = clean_line[2:]  # Remove '$ '
+            elif "└──╼ $" in clean_line:
+                # Extract command from script format: └──╼ $command
+                dollar_pos = clean_line.find("└──╼ $")
+                if dollar_pos != -1:
+                    command_match = clean_line[dollar_pos + 6 :]  # Remove '└──╼ $'
+
+            if command_match:
                 # Save previous command and output
                 if current_command and current_output:
                     commands.append((current_command, "\n".join(current_output)))
 
-                current_command = line[2:]  # Remove '$ '
+                current_command = command_match
                 current_output = []
             else:
                 if "error" in line.lower() or "failed" in line.lower():
@@ -341,42 +339,108 @@ class LogProcessor:
         if current_command and current_output:
             commands.append((current_command, "\n".join(current_output)))
 
-        # Build intelligent summary
+        return commands, errors
+
+    def _build_tiered_summary(
+        self, commands: List[tuple[str, str]], errors: List[str]
+    ) -> List[str]:
+        """Build tiered summary with different detail levels based on recency.
+
+        Args:
+            commands: List of (command, output) tuples
+            errors: List of error messages
+
+        Returns:
+            List of summary parts
+        """
         summary_parts = []
+        total_commands = len(commands)
 
-        # Always include recent errors
-        if errors:
-            recent_errors = errors[-3:]  # Last 3 errors
-            summary_parts.append("Recent errors/failures:")
-            summary_parts.extend(f"  {error}" for error in recent_errors)
+        if total_commands == 0:
+            return ["No commands executed in this session."]
 
-        # Include most recent commands with their outputs
-        recent_commands = commands[-5:]  # Last 5 commands
-        if recent_commands:
-            summary_parts.append("\nRecent commands:")
-            for cmd, output in recent_commands:
-                summary_parts.append(f"$ {cmd}")
-                # Truncate long outputs
-                if len(output) > 200:
-                    summary_parts.append(f"{output[:200]}...")
-                else:
-                    summary_parts.append(output)
+        # Calculate tier boundaries
+        recent_count = max(1, int(total_commands * 0.2))  # Last 20% (min 1)
+        middle_count = max(1, int(total_commands * 0.3))  # Next 30% (min 1)
 
-        # If we have many commands, add a summary
-        if len(commands) > 5:
+        # Split commands into tiers
+        recent_commands = commands[-recent_count:]
+        middle_commands = (
+            commands[-(recent_count + middle_count) : -recent_count]
+            if recent_count < total_commands
+            else []
+        )
+        older_commands = (
+            commands[: -(recent_count + middle_count)]
+            if (recent_count + middle_count) < total_commands
+            else []
+        )
+
+        # Add session overview
+        if total_commands > 10:
             unique_commands = list(set(cmd for cmd, _ in commands))
-            summary_parts.insert(
-                0,
-                (
-                    f"Session summary: {len(commands)} commands executed "
-                    f"including: {', '.join(unique_commands[-10:])}"
-                ),
+            summary_parts.append(
+                f"Session overview: {total_commands} commands executed "
+                f"including: {', '.join(unique_commands[-15:])}"
             )
 
-        result = "\n".join(summary_parts)
+        # Add recent errors (always high priority)
+        if errors:
+            recent_errors = errors[-3:]  # Last 3 errors
+            summary_parts.append("\n🔴 Recent errors/failures:")
+            summary_parts.extend(
+                f"  {error[:100]}..." if len(error) > 100 else f"  {error}"
+                for error in recent_errors
+            )
 
-        # Apply token-based truncation if still too long
-        return self._apply_token_limit(result, max_tokens, model_name)
+        # Tier 1: Recent commands (full detail)
+        if recent_commands:
+            summary_parts.append(f"\n📋 Recent commands (last {len(recent_commands)}):")
+            for cmd, output in recent_commands:
+                summary_parts.append(f"$ {cmd}")
+                if output.strip():
+                    # Full output for recent commands, but reasonable limit
+                    if len(output) > 200:
+                        summary_parts.append(f"{output[:200]}...")
+                    else:
+                        summary_parts.append(output)
+
+        # Tier 2: Middle commands (moderate detail)
+        if middle_commands:
+            summary_parts.append(
+                f"\n📝 Earlier commands (previous {len(middle_commands)}):"
+            )
+            for cmd, output in middle_commands:
+                summary_parts.append(f"$ {cmd}")
+                if output.strip():
+                    # Truncated output for middle commands
+                    if len(output) > 80:
+                        summary_parts.append(f"{output[:80]}...")
+                    else:
+                        summary_parts.append(output)
+
+        # Tier 3: Older commands (summary only)
+        if older_commands:
+            older_cmd_names = [cmd for cmd, _ in older_commands]
+            # Group similar commands
+            cmd_counts: Dict[str, int] = {}
+            for cmd in older_cmd_names:
+                # Simplify command for grouping (remove arguments)
+                base_cmd = cmd.split()[0] if cmd else "unknown"
+                cmd_counts[base_cmd] = cmd_counts.get(base_cmd, 0) + 1
+
+            summary_parts.append(
+                f"\n📊 Session history ({len(older_commands)} earlier commands):"
+            )
+            for cmd, count in sorted(
+                cmd_counts.items(), key=lambda x: x[1], reverse=True
+            )[:10]:
+                if count > 1:
+                    summary_parts.append(f"  {cmd}: {count} times")
+                else:
+                    summary_parts.append(f"  {cmd}")
+
+        return summary_parts
 
     def _apply_token_limit(self, text: str, max_tokens: int, model_name: str) -> str:
         """Apply token limit to text content.
@@ -427,13 +491,6 @@ class LogProcessor:
         try:
             with open(log_path, "r", errors="ignore", encoding="utf-8") as f:
                 lines = f.readlines()
-
-            # Keep log file manageable
-            max_lines = 1000
-            if len(lines) > max_lines:
-                with open(log_path, "w", encoding="utf-8") as fw:
-                    fw.writelines(lines[-max_lines:])
-                lines = lines[-max_lines:]
 
             full_text = "".join(lines)
 
@@ -531,19 +588,34 @@ class LogProcessor:
         i = 0
         while i < len(lines):
             line = lines[i].strip()
+            # Clean ANSI escape sequences for parsing
+            clean_line = self._clean_ansi_sequences(line)
 
             # Skip empty lines and terminal formatting
             if (
-                not line
-                or line.startswith("[")
-                or line.startswith("┌─")
-                or line.startswith("└─")
+                not clean_line
+                or clean_line.startswith("[")
+                or clean_line.startswith("┌─")
+                or clean_line.startswith("└─")
             ):
                 i += 1
                 continue
 
             # Detect AI assistant queries (ai or aixterm commands)
-            if line.startswith("$ ai ") or line.startswith("$ aixterm "):
+            # Handle both traditional format ($ command) and
+            # script format (└──╼ $command)
+            ai_command_match = None
+            if clean_line.startswith("$ ai ") or clean_line.startswith("$ aixterm "):
+                ai_command_match = clean_line
+            elif "└──╼ $ai " in clean_line or "└──╼ $aixterm " in clean_line:
+                # Extract command from script format
+                dollar_pos = clean_line.find("└──╼ $")
+                if dollar_pos != -1:
+                    ai_command_match = (
+                        "$" + clean_line[dollar_pos + 6 :]
+                    )  # Convert to standard format
+
+            if ai_command_match:
                 # Save any ongoing AI response first
                 if current_ai_response and collecting_response:
                     ai_content = "\n".join(current_ai_response).strip()
@@ -558,10 +630,10 @@ class LogProcessor:
                     collecting_response = False
 
                 # Extract and save the user query
-                if line.startswith("$ ai "):
-                    query_part = line[5:].strip()  # Remove "$ ai "
-                elif line.startswith("$ aixterm "):
-                    query_part = line[9:].strip()  # Remove "$ aixterm "
+                if ai_command_match.startswith("$ ai "):
+                    query_part = ai_command_match[5:].strip()  # Remove "$ ai "
+                elif ai_command_match.startswith("$ aixterm "):
+                    query_part = ai_command_match[9:].strip()  # Remove "$ aixterm "
                 else:
                     query_part = ""
 
@@ -579,7 +651,9 @@ class LogProcessor:
             # If we're collecting a response, continue until we hit another command
             elif collecting_response:
                 # Stop collecting if we hit another command
-                if line.startswith("$ "):
+                # (traditional or script format)
+                is_command = clean_line.startswith("$ ") or "└──╼ $" in clean_line
+                if is_command:
                     # Save the collected response
                     if current_ai_response:
                         ai_content = "\n".join(current_ai_response).strip()
@@ -622,59 +696,11 @@ class LogProcessor:
 
         return messages
 
-    def get_terminal_context_without_conversations(self, log_content: str) -> str:
-        """Extract terminal context excluding AI conversations.
-
-        This provides command outputs, system information, and user commands
-        but excludes AI assistant conversations to avoid duplication with
-        the structured conversation history.
-
-        Args:
-            log_content: Raw terminal log content
-
-        Returns:
-            Clean terminal context without AI conversations
-        """
-        lines = log_content.split("\n")
-        context_lines = []
-        skip_until_next_command = False
-
-        for line in lines:
-            stripped = line.strip()
-
-            # Skip empty lines and terminal formatting
-            if (
-                not stripped
-                or stripped.startswith("[")
-                or stripped.startswith("┌─")
-                or stripped.startswith("└─")
-            ):
-                continue
-
-            # Skip AI/aixterm commands and their responses
-            if stripped.startswith("$ ai ") or stripped.startswith("$ aixterm "):
-                skip_until_next_command = True
-                continue
-
-            # Check if we should stop skipping
-            if skip_until_next_command:
-                # Stop skipping when we hit a regular command (not AI-related)
-                if stripped.startswith("$ ") and not any(
-                    ai_cmd in stripped for ai_cmd in ["$ ai ", "$ aixterm "]
-                ):
-                    skip_until_next_command = False
-                    context_lines.append(line)
-                else:
-                    # Still skipping AI-related content
-                    continue
-            else:
-                # Regular terminal content (commands, outputs, system info)
-                context_lines.append(line)
-
-        return "\n".join(context_lines).strip()
-
     def clear_session_context(self) -> bool:
         """Clear the context for the current terminal session.
+
+        Truncates the log file instead of deleting it to keep the shell
+        integration working properly.
 
         Returns:
             True if a log file was found and cleared, False otherwise
@@ -682,8 +708,10 @@ class LogProcessor:
         try:
             log_file = self.find_log_file()
             if log_file and log_file.exists():
-                # Remove the log file to clear the session context
-                log_file.unlink()
+                # Truncate the log file to clear the session context
+                # This keeps the file intact so shell integration continues working
+                with open(log_file, "w", encoding="utf-8") as f:
+                    f.write("")  # Clear the file contents
                 self.logger.info(f"Cleared session context: {log_file}")
                 return True
             else:
@@ -692,3 +720,44 @@ class LogProcessor:
         except Exception as e:
             self.logger.error(f"Error clearing session context: {e}")
             return False
+
+    def _clean_ansi_sequences(self, text: str) -> str:
+        """Remove ANSI escape sequences from text.
+
+        Args:
+            text: Text potentially containing ANSI escape sequences
+
+        Returns:
+            Text with ANSI sequences removed
+        """
+        import re
+
+        # Pattern to match ANSI escape sequences
+        ansi_escape = re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
+        return ansi_escape.sub("", text)
+
+    def _manage_log_file_size(self, log_path: Path) -> None:
+        """Manage log file size by truncating if it gets too large.
+
+        Args:
+            log_path: Path to the log file to manage
+        """
+        try:
+            max_lines = 300  # Further reduced from 500 to prevent token
+            # overflow
+
+            with open(log_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            if len(lines) > max_lines:
+                self.logger.debug(
+                    f"Truncating log file {log_path} from {len(lines)} "
+                    f"to {max_lines} lines"
+                )
+
+                # Keep the last max_lines
+                with open(log_path, "w", encoding="utf-8") as fw:
+                    fw.writelines(lines[-max_lines:])
+
+        except Exception as e:
+            self.logger.warning(f"Could not manage log file size for {log_path}: {e}")

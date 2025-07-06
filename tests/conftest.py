@@ -73,18 +73,6 @@ $ pwd
 
 
 @pytest.fixture
-def mock_llm_response():
-    """Mock LLM response for testing."""
-    return """Here's how you can list processes:
-
-```bash
-ps aux
-```
-
-This will show all running processes with detailed information."""
-
-
-@pytest.fixture
 def mock_requests_post():
     """Mock requests.post for LLM API calls."""
     with patch("aixterm.llm.client.requests.post") as mock_post:

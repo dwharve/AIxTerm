@@ -375,33 +375,3 @@ class BaseIntegration(ABC):
             self.logger.error(f"Error installing integration: {e}")
             print(f"Error: Failed to install integration: {e}")
             return False
-
-    def _generate_tty_function(self) -> str:
-        """Generate TTY detection function (shell-agnostic logic).
-
-        Returns:
-            Common TTY detection logic
-        """
-        return """
-    # Try multiple methods to get TTY name for reliable session isolation
-    local tty_name=""
-
-    # Method 1: Direct tty command (most reliable)
-    if command -v tty >/dev/null 2>&1; then
-        tty_name=$(tty 2>/dev/null | sed 's|\\/dev\\/||g' | sed 's|\\/|-|g')
-    fi
-
-    # Method 2: Fallback to environment variables if tty fails
-    if [[ -z "$tty_name" ]] || [[ "$tty_name" == "not a tty" ]]; then
-        # Use SSH_TTY, terminal process info, or PID as fallback
-        if [[ -n "$SSH_TTY" ]]; then
-            tty_name=$(echo "$SSH_TTY" | sed 's|\\/dev\\/||g' | sed 's|\\/|-|g')
-        elif [[ -n "$TERM" ]] && [[ -n "$PPID" ]]; then
-            tty_name="term-$PPID"
-        else
-            tty_name="default"
-        fi
-    fi
-
-    echo "$HOME/.aixterm_log.${tty_name}"
-"""
