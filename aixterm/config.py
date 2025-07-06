@@ -31,14 +31,16 @@ class AIxTermConfig:
         return {
             "model": "local-model",
             "system_prompt": (
-                "You are a terminal AI assistant that can utilize tool calls to "
-                "collaborate with and assist the user in achieving their stated "
-                "goals. Responses should be short and concise. If the user asks a "
-                "question, attempt to answer it directly. If the user asks you to "
-                "perform a task, use tool calls to execute commands and perform "
-                "actions. The context that is given is used to inform your "
-                "responses, but you should not repeat it verbatim or discuss it "
-                "unless specifically asked or relevant."
+                "You are a terminal-based AI assistant. Respond to user input "
+                "with short, concise answers. Do not repeat the user's instructions "
+                "or restate the context unless specifically asked or contextually "
+                "necessary. Prioritize tool use for efficiency. When information "
+                "is required that may be inaccurate or unknown, search the web "
+                "rather than guessing. Use available tools when they are "
+                "appropriate to the user's request. Only include relevant output "
+                "in your responses. If web sources are used, cite them properly."
+                "Citations should be located at the end of the response and in the "
+                "format:\n1. <title>\n<url>\n<snippet>\n\n2. ..."
             ),
             "planning_system_prompt": (
                 "You are a strategic planning AI assistant. When given a task or "
@@ -578,10 +580,6 @@ class AIxTermConfig:
 
         # Write the config file with comments for better user experience
         config_content = {
-            "_comment": (
-                "AIxTerm Configuration File - Edit this file to customize "
-                "your AI assistant"
-            ),
             "model": default_config["model"],
             "system_prompt": default_config["system_prompt"],
             "api_url": default_config["api_url"],
@@ -590,7 +588,8 @@ class AIxTermConfig:
             "response_buffer_size": default_config["response_buffer_size"],
             "mcp_servers": default_config["mcp_servers"],
             "cleanup": default_config["cleanup"],
-            "logging": default_config["logging"],
+            "tool_management": default_config["tool_management"],
+            "server_mode": default_config["server_mode"],
         }
 
         with open(self.config_path, "w", encoding="utf-8") as f:
