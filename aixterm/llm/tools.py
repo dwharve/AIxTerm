@@ -18,15 +18,15 @@ class ToolHandler:
         self.config = config_manager
         self.mcp_client = mcp_client
         self.logger = logger
-        self.progress_display_manager = None
+        self.display_manager = None
 
-    def set_progress_display_manager(self, progress_display_manager: Any) -> None:
-        """Set the progress display manager for clearing displays during tool execution.
+    def set_progress_display_manager(self, display_manager: Any) -> None:
+        """Set the display manager for clearing displays during tool execution.
 
         Args:
-            progress_display_manager: Progress display manager instance
+            display_manager: Display manager instance
         """
-        self.progress_display_manager = progress_display_manager
+        self.display_manager = display_manager
 
     def execute_tool_call(
         self,
@@ -107,6 +107,7 @@ class ToolHandler:
             function = tool_call.get("function", {})
             function_name = function.get("name", "")
 
+            # Process tool call
             self.logger.info(f"Executing tool: {function_name}")
 
             # Display tool execution to user
@@ -274,11 +275,15 @@ class ToolHandler:
             args_formatted = ", ".join(arg_display) if arg_display else "(no arguments)"
 
             # Display the tool execution
-            print(f"{function_name}: {args_formatted}")
+            if self.display_manager:
+                self.display_manager.show_tool_call(
+                    f"{function_name}: {args_formatted}"
+                )
 
         except Exception as e:
             # Fallback display if argument parsing fails
-            print(f"{function_name}: {arguments_str}")
+            if self.display_manager:
+                self.display_manager.show_tool_call(f"{function_name}: {arguments_str}")
             self.logger.debug(f"Failed to parse tool arguments for display: {e}")
 
     def _display_tool_result(
@@ -300,7 +305,7 @@ class ToolHandler:
                     if lines:
                         header = lines[0]
                         if "Found 0" in header or "No results" in result_content:
-                            print(f"→ {function_name} completed (no results found)")
+                            msg = f"{function_name} completed (no results found)"
                         else:
                             # Extract number from "Found X results" or search results
                             import re
@@ -308,23 +313,30 @@ class ToolHandler:
                             match = re.search(r"Found (\d+) (?:search )?result", header)
                             if match:
                                 count = match.group(1)
-                                print(
-                                    f"→ {function_name} completed "
+                                msg = (
+                                    f"{function_name} completed "
                                     f"({count} results found)"
                                 )
                             else:
-                                print(f"→ {function_name} completed")
+                                msg = f"{function_name} completed"
                     else:
-                        print(f"→ {function_name} completed")
+                        msg = f"{function_name} completed"
                 else:
                     # Generic success display for other tools
-                    print(f"→ {function_name} completed")
+                    msg = f"{function_name} completed"
+
+                if self.display_manager:
+                    self.display_manager.show_success(msg)
             else:
                 # Error display
-                print(f"→ {function_name} failed")
+                msg = f"{function_name} failed"
+                if self.display_manager:
+                    self.display_manager.show_error(msg)
 
         except Exception as e:
             # Fallback display
             status = "completed" if success else "failed"
-            print(f"→ {function_name} {status}")
+            msg = f"{function_name} {status}"
+            if self.display_manager:
+                self.display_manager.show_message(msg)
             self.logger.debug(f"Failed to format tool result display: {e}")

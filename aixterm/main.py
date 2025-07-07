@@ -8,9 +8,9 @@ from typing import Any, Callable, List, Optional
 from .cleanup import CleanupManager
 from .config import AIxTermConfig
 from .context import TerminalContext
+from .display import create_display_manager
 from .llm import LLMClient, LLMError
 from .mcp_client import MCPClient
-from .progress_display import create_progress_display
 from .utils import get_logger
 
 
@@ -26,9 +26,9 @@ class AIxTerm:
         self.config = AIxTermConfig(Path(config_path) if config_path else None)
         self.logger = get_logger(__name__)
 
-        # Initialize progress display
+        # Initialize display manager
         progress_type = self.config.get("progress_display_type", "bar")
-        self.progress_display = create_progress_display(progress_type)
+        self.display_manager = create_display_manager(progress_type)
 
         # Initialize components
         self.context_manager = TerminalContext(self.config)
@@ -37,7 +37,7 @@ class AIxTerm:
             self.config,
             self.mcp_client,
             self._create_progress_callback_factory(),
-            self.progress_display,
+            self.display_manager,
         )
         self.cleanup_manager = CleanupManager(self.config)
 
@@ -85,8 +85,8 @@ class AIxTerm:
             tools = None
             if self.config.get_mcp_servers():
                 # Show progress for tool discovery
-                tool_progress = self.progress_display.create_progress(
-                    progress_token="tool_discovery",
+                tool_progress = self.display_manager.create_progress(
+                    token="tool_discovery",
                     title="Discovering available tools",
                     total=None,
                     show_immediately=True,
@@ -132,8 +132,8 @@ class AIxTerm:
                     tools = None
 
             # Show progress for LLM processing
-            llm_progress = self.progress_display.create_progress(
-                progress_token="llm_processing",
+            llm_progress = self.display_manager.create_progress(
+                token="llm_processing",
                 title="Processing with AI",
                 total=None,
                 show_immediately=False,
@@ -155,7 +155,7 @@ class AIxTerm:
                 raise
 
             if not response.strip():
-                print("No response received from AI.")
+                self.display_manager.show_message("No response received from AI.")
                 return
 
             # Extract and potentially execute commands
@@ -166,33 +166,45 @@ class AIxTerm:
             # Provide user-friendly error message
             error_msg = str(e)
             if "Connection refused" in error_msg:
-                print("Error: Cannot connect to the AI service.")
-                print("Please check that your LLM server is running and accessible.")
-                print(
+                self.display_manager.show_error("Cannot connect to the AI service.")
+                self.display_manager.show_message(
+                    "Please check that your LLM server is running and accessible."
+                )
+                self.display_manager.show_message(
                     f"Current API URL: {self.config.get('api_url', 'Not configured')}"
                 )
             elif "timeout" in error_msg.lower():
-                print("Error: AI service is not responding (timeout).")
-                print("The request took too long. Try again or check your connection.")
+                self.display_manager.show_error(
+                    "AI service is not responding (timeout)."
+                )
+                self.display_manager.show_message(
+                    "The request took too long. Try again or check your connection."
+                )
             elif (
                 "401" in error_msg
                 or "403" in error_msg
                 or "unauthorized" in error_msg.lower()
             ):
-                print("Error: Authentication failed.")
-                print("Please check your API key configuration.")
+                self.display_manager.show_error("Authentication failed.")
+                self.display_manager.show_message(
+                    "Please check your API key configuration."
+                )
             elif "404" in error_msg:
-                print("Error: AI service endpoint not found.")
-                print("Please verify your API URL configuration.")
+                self.display_manager.show_error("AI service endpoint not found.")
+                self.display_manager.show_message(
+                    "Please verify your API URL configuration."
+                )
             else:
-                print(f"Error communicating with AI: {error_msg}")
+                self.display_manager.show_error(
+                    f"Error communicating with AI: {error_msg}"
+                )
         except KeyboardInterrupt:
-            print("\n\nOperation cancelled by user.")
+            self.display_manager.show_message("\n\nOperation cancelled by user.")
             self.shutdown()
             sys.exit(0)
         except Exception as e:
             self.logger.error(f"Unexpected error: {e}")
-            print(f"Unexpected error: {e}")
+            self.display_manager.show_message(f"Unexpected error: {e}")
             sys.exit(1)
 
     def _handle_response(self, response: str, original_query: str) -> None:
@@ -223,8 +235,8 @@ class AIxTerm:
                 Progress callback function
             """
             # Create progress display
-            progress_display = self.progress_display.create_progress(
-                progress_token=progress_token,
+            progress_display = self.display_manager.create_progress(
+                token=progress_token,
                 title=title,
                 total=None,
                 show_immediately=True,
@@ -274,108 +286,129 @@ class AIxTerm:
     def list_tools(self) -> None:
         """List available MCP tools."""
         if not self.config.get_mcp_servers():
-            print("No MCP servers configured.")
+            self.display_manager.show_message("No MCP servers configured.")
             return
 
         self.mcp_client.initialize()
         tools = self.mcp_client.get_available_tools()
 
         if not tools:
-            print("No tools available from MCP servers.")
+            self.display_manager.show_message("No tools available from MCP servers.")
             return
 
-        print("\nAvailable MCP Tools:")
-        print("=" * 50)
+        self.display_manager.show_message("\nAvailable MCP Tools:")
+        self.display_manager.show_message("=" * 50)
 
         current_server = None
         for tool in tools:
             server_name = tool.get("server", "unknown")
             if server_name != current_server:
-                print(f"\nServer: {server_name}")
-                print("-" * 30)
+                self.display_manager.show_message(f"\nServer: {server_name}")
+                self.display_manager.show_message("-" * 30)
                 current_server = server_name
 
             function = tool.get("function", {})
             name = function.get("name", "unknown")
             description = function.get("description", "No description")
 
-            print(f"  {name}: {description}")
+            self.display_manager.show_message(f"  {name}: {description}")
 
     def status(self) -> None:
         """Show AIxTerm status information."""
-        print("AIxTerm Status")
-        print("=" * 50)
+        self.display_manager.show_message("AIxTerm Status")
+        self.display_manager.show_message("=" * 50)
 
         # Configuration info
-        print(f"Model: {self.config.get('model')}")
-        print(f"API URL: {self.config.get('api_url')}")
-        print(f"Context Size: {self.config.get_total_context_size()}")
-        print(f"Response Buffer: {self.config.get_response_buffer_size()}")
-        print(f"Available for Context: {self.config.get_available_context_size()}")
+        self.display_manager.show_message(f"Model: {self.config.get('model')}")
+        self.display_manager.show_message(f"API URL: {self.config.get('api_url')}")
+        self.display_manager.show_message(
+            f"Context Size: {self.config.get_total_context_size()}"
+        )
+        self.display_manager.show_message(
+            f"Response Buffer: {self.config.get_response_buffer_size()}"
+        )
+        self.display_manager.show_message(
+            f"Available for Context: {self.config.get_available_context_size()}"
+        )
 
         # MCP servers
         mcp_servers = self.config.get_mcp_servers()
-        print(f"\nMCP Servers: {len(mcp_servers)}")
+        self.display_manager.show_message(f"\nMCP Servers: {len(mcp_servers)}")
         if mcp_servers:
             self.mcp_client.initialize()
             server_status = self.mcp_client.get_server_status()
             for server_name, status in server_status.items():
                 status_text = "Running" if status["running"] else "Stopped"
                 tool_count = status["tool_count"]
-                print(f"  {server_name}: {status_text} ({tool_count} tools)")
+                self.display_manager.show_message(
+                    f"  {server_name}: {status_text} ({tool_count} tools)"
+                )
 
         # Cleanup status
-        print("\nCleanup Status:")
+        self.display_manager.show_message("\nCleanup Status:")
         cleanup_status = self.cleanup_manager.get_cleanup_status()
-        print(f"  Enabled: {cleanup_status['cleanup_enabled']}")
-        print(
+        self.display_manager.show_message(
+            f"  Enabled: {cleanup_status['cleanup_enabled']}"
+        )
+        self.display_manager.show_message(
             f"  Log Files: {cleanup_status['log_files_count']} "
             f"({cleanup_status['total_log_size']})"
         )
-        print(f"  Last Cleanup: {cleanup_status['last_cleanup'] or 'Never'}")
-        print(f"  Next Cleanup: {cleanup_status['next_cleanup_due'] or 'Disabled'}")
+        self.display_manager.show_message(
+            f"  Last Cleanup: {cleanup_status['last_cleanup'] or 'Never'}"
+        )
+        self.display_manager.show_message(
+            f"  Next Cleanup: {cleanup_status['next_cleanup_due'] or 'Disabled'}"
+        )
 
     def cleanup_now(self) -> None:
         """Force immediate cleanup."""
-        print("Running cleanup...")
+        self.display_manager.show_message("Running cleanup...")
         results = self.cleanup_manager.force_cleanup_now()
 
-        print("Cleanup completed:")
-        print(f"  Log files removed: {results.get('log_files_removed', 0)}")
-        print(f"  Log files cleaned: {results.get('log_files_cleaned', 0)}")
-        print(f"  Temp files removed: {results.get('temp_files_removed', 0)}")
-        print(f"  Space freed: {results.get('bytes_freed', 0)} bytes")
+        self.display_manager.show_message("Cleanup completed:")
+        self.display_manager.show_message(
+            f"  Log files removed: {results.get('log_files_removed', 0)}"
+        )
+        self.display_manager.show_message(
+            f"  Log files cleaned: {results.get('log_files_cleaned', 0)}"
+        )
+        self.display_manager.show_message(
+            f"  Temp files removed: {results.get('temp_files_removed', 0)}"
+        )
+        self.display_manager.show_message(
+            f"  Space freed: {results.get('bytes_freed', 0)} bytes"
+        )
 
         if results.get("errors"):
-            print(f"  Errors: {len(results['errors'])}")
+            self.display_manager.show_message(f"  Errors: {len(results['errors'])}")
             for error in results["errors"][:3]:  # Show first 3 errors
-                print(f"    {error}")
+                self.display_manager.show_message(f"    {error}")
 
     def clear_context(self) -> None:
         """Clear context for the active session."""
-        print("Clearing context for active session...")
+        self.display_manager.show_message("Clearing context for active session...")
         try:
             # Clear the session log file for the current TTY
             cleared = self.context_manager.clear_session_context()
             if cleared:
-                print("✓ Session context cleared successfully")
-                print(
-                    "  The conversation history for this terminal session "
-                    "has been removed"
+                self.display_manager.show_success(
+                    "Session context cleared successfully - conversation history removed"
                 )
             else:
-                print("ℹ No active session context found to clear")
-                print("  This may be a new session or context was already empty"[:85])
+                self.display_manager.show_message(
+                    "ℹ No active session context found to clear"
+                )
         except Exception as e:
             self.logger.error(f"Error clearing context: {e}")
-            print(f"✗ Failed to clear context: {e}")
+            self.display_manager.show_error(f"Failed to clear context: {e}")
 
     def shutdown(self) -> None:
         """Shutdown AIxTerm gracefully."""
         self.logger.info("Shutting down AIxTerm")
         try:
-            # Clean up progress displays
-            self.progress_display.cleanup_all()
+            # Clean up display manager
+            self.display_manager.shutdown()
 
             # Shutdown MCP client
             self.mcp_client.shutdown()
@@ -391,8 +424,10 @@ class AIxTerm:
         config_path = self.config.config_path
 
         if config_path.exists() and not force:
-            print(f"Configuration file already exists at: {config_path}")
-            print(
+            self.display_manager.show_message(
+                f"Configuration file already exists at: {config_path}"
+            )
+            self.display_manager.show_message(
                 "Use --init-config --force to overwrite the existing " "configuration."
             )
             return
@@ -400,15 +435,25 @@ class AIxTerm:
         success = self.config.create_default_config(overwrite=force)
 
         if success:
-            print(f"Default configuration created at: {config_path}")
-            print("\nYou can now edit this file to customize your AIxTerm settings.")
-            print("Key settings to configure:")
-            print("  - api_url: URL of your LLM API endpoint")
-            print("  - api_key: API key for authentication (if required)")
-            print("  - model: Model name to use")
-            print("  - mcp_servers: MCP servers for additional tools")
+            self.display_manager.show_success(
+                f"Default configuration created at: {config_path}"
+            )
+            self.display_manager.show_message(
+                "\nYou can now edit this file to customize your AIxTerm settings."
+            )
+            self.display_manager.show_message("Key settings to configure:")
+            self.display_manager.show_message(
+                "  - api_url: URL of your LLM API endpoint"
+            )
+            self.display_manager.show_message(
+                "  - api_key: API key for authentication (if required)"
+            )
+            self.display_manager.show_message("  - model: Model name to use")
+            self.display_manager.show_message(
+                "  - mcp_servers: MCP servers for additional tools"
+            )
         else:
-            print("Failed to create configuration file.")
+            self.display_manager.show_error("Failed to create configuration file.")
 
     def run_cli_mode(
         self,

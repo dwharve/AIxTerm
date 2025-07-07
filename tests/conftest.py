@@ -73,31 +73,55 @@ $ pwd
 
 
 @pytest.fixture
-def mock_requests_post():
-    """Mock requests.post for LLM API calls."""
-    with patch("aixterm.llm.client.requests.post") as mock_post:
+def mock_openai_client():
+    """Mock OpenAI client for LLM API calls."""
+    with patch("aixterm.llm.client.OpenAI") as mock_openai_class:
+        # Create mock client instance
+        mock_client = Mock()
+        mock_openai_class.return_value = mock_client
+
         # Mock streaming response
-        mock_response = Mock()
-        mock_response.raise_for_status.return_value = None
-        # Mock streaming response with platform-specific command
+        mock_chunk1 = Mock()
+        mock_chunk1.choices = [Mock()]
+        mock_chunk1.choices[0].delta = Mock()
+        mock_chunk1.choices[0].delta.content = "Here's how to "
+        mock_chunk1.choices[0].delta.tool_calls = None
+
+        mock_chunk2 = Mock()
+        mock_chunk2.choices = [Mock()]
+        mock_chunk2.choices[0].delta = Mock()
+        mock_chunk2.choices[0].delta.tool_calls = None
+
+        # Mock platform-specific command output
         import sys
 
         if sys.platform == "win32":
-            command_output = "\\n\\n```cmd\\ntasklist\\n```"
+            mock_chunk2.choices[0].delta.content = "list processes: tasklist"
         else:
-            command_output = "\\n\\n```bash\\nps aux\\n```"
+            mock_chunk2.choices[0].delta.content = "list processes: ps aux"
 
-        mock_response.iter_lines.return_value = [
-            b'data: {"choices":[{"delta":{"content":"Here\'s how"}}]}',
-            b'data: {"choices":[{"delta":{"content":" to list processes:"}}]}',
-            (
-                f'data: {{"choices":[{{"delta":{{"content":"{command_output}"'
-                f"}}}}]}}"
-            ).encode(),
-            b"data: [DONE]",
-        ]
-        mock_post.return_value = mock_response
-        yield mock_post
+        mock_chunks = [mock_chunk1, mock_chunk2]
+
+        # Mock non-streaming response
+        mock_response = Mock()
+        mock_response.choices = [Mock()]
+        mock_response.choices[0].message = Mock()
+        mock_response.choices[0].message.content = (
+            "Here's how to list processes: ps aux"
+        )
+        mock_response.choices[0].message.tool_calls = None
+
+        # Configure the mock to return either streaming or non-streaming
+        # based on the stream parameter
+        def create_side_effect(**kwargs):
+            if kwargs.get("stream", False):
+                return iter(mock_chunks)
+            else:
+                return mock_response
+
+        mock_client.chat.completions.create.side_effect = create_side_effect
+
+        yield mock_client
 
 
 @pytest.fixture

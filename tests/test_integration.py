@@ -23,7 +23,7 @@ class TestAIxTermIntegration:
         assert app.mcp_client is not None
         assert app.cleanup_manager is not None
 
-    def test_run_with_simple_query(self, mock_config, mock_requests_post):
+    def test_run_with_simple_query(self, mock_config, mock_openai_client):
         """Test running AIxTerm with a simple query."""
         app = AIxTerm()
 
@@ -320,7 +320,7 @@ class TestMainFunction:
                     assert excinfo.value.code == 1
 
     def test_end_to_end_workflow(
-        self, mock_config, mock_requests_post, sample_log_file
+        self, mock_config, mock_openai_client, sample_log_file
     ):
         """Test complete end-to-end workflow without command execution."""
         with patch.object(sys, "argv", ["aixterm", "list", "processes"]):
@@ -335,7 +335,7 @@ class TestMainFunction:
                     main()
 
                     # Verify that the request was made to the LLM
-                    mock_requests_post.assert_called()
+                    mock_openai_client.chat.completions.create.assert_called()
 
 
 class TestMainFunctionWithFiles:
@@ -583,19 +583,22 @@ class TestPlanningModeIntegration:
                     "api_url", "http://custom:8080/v1"
                 )
 
-    def test_planning_mode_integration_with_llm(self, mock_config, mock_requests_post):
+    def test_planning_mode_integration_with_llm(self, mock_config, mock_openai_client):
         """Test planning mode integration with LLM."""
         app = AIxTerm()
 
-        # Mock planning response
-        mock_requests_post.return_value.status_code = 200
-        mock_requests_post.return_value.iter_lines.return_value = [
-            (
-                b'data: {"choices": [{"delta": {"content": "## Plan\\n1. First '
-                b'step\\n2. Second step"}}]}'
-            ),
-            b"data: [DONE]",
-        ]
+        # Mock planning response - configure the client to return planning content
+        def planning_side_effect(**kwargs):
+            mock_chunk = Mock()
+            mock_chunk.choices = [Mock()]
+            mock_chunk.choices[0].delta = Mock()
+            mock_chunk.choices[0].delta.content = (
+                "## Plan\\n1. First step\\n2. Second step"
+            )
+            mock_chunk.choices[0].delta.tool_calls = None
+            return iter([mock_chunk])
+
+        mock_openai_client.chat.completions.create.side_effect = planning_side_effect
 
         with patch.object(
             app.context_manager,
@@ -607,10 +610,8 @@ class TestPlanningModeIntegration:
                     app.run("Deploy a web application", use_planning=True)
 
                     # Verify planning mode was used
-                    call_args = mock_requests_post.call_args
-                    request_data = call_args[1][
-                        "json"
-                    ]  # Already a dict, no need to parse JSON
+                    call_args = mock_openai_client.chat.completions.create.call_args
+                    request_data = call_args[1]  # kwargs from the call
                     system_message = request_data["messages"][0]["content"]
                     assert "strategic planning" in system_message.lower()
                     mock_log.assert_called()
@@ -619,7 +620,7 @@ class TestPlanningModeIntegration:
 class TestAdvancedIntegration:
     """Advanced integration test cases."""
 
-    def test_file_context_integration(self, mock_config, mock_requests_post, tmp_path):
+    def test_file_context_integration(self, mock_config, mock_openai_client, tmp_path):
         """Test file context integration with multiple files."""
         app = AIxTerm()
 

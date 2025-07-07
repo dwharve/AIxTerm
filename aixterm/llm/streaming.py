@@ -9,19 +9,17 @@ import requests
 class StreamingHandler:
     """Handles streaming responses from LLM APIs."""
 
-    def __init__(
-        self, config_manager: Any, logger: Any, progress_display_manager: Any = None
-    ):
+    def __init__(self, config_manager: Any, logger: Any, display_manager: Any = None):
         """Initialize streaming handler.
 
         Args:
             config_manager: Configuration manager instance
             logger: Logger instance
-            progress_display_manager: Progress display manager for clearing displays
+            display_manager: Progress display manager for clearing displays
         """
         self.config = config_manager
         self.logger = logger
-        self.progress_display_manager = progress_display_manager
+        self.display_manager = display_manager
         self._streaming_started = False
         self._response_start_time: Optional[float] = None
 
@@ -31,7 +29,7 @@ class StreamingHandler:
         Args:
             api_progress: API progress indicator to complete (if provided)
         """
-        if self.progress_display_manager and not self._streaming_started:
+        if self.display_manager and not self._streaming_started:
             try:
                 # Complete API progress if provided
                 if api_progress:
@@ -41,13 +39,7 @@ class StreamingHandler:
                         self.logger.debug(f"Error completing API progress: {e}")
 
                 # Clear all active progress displays using the new method
-                self.progress_display_manager.clear_all_displays()
-
-                # Clear the entire line and move to beginning for clean output
-                import sys
-
-                sys.stderr.write("\r\033[2K")  # Clear entire line
-                sys.stderr.flush()
+                self.display_manager.clear_all_progress()
 
             except Exception as e:
                 self.logger.debug(f"Error clearing progress displays: {e}")
@@ -97,7 +89,17 @@ class StreamingHandler:
                                     "name", "unknown"
                                 )
                                 if not silent:
-                                    print(f"[Tool Call: {function_name}]")
+                                    # Use display manager for tool call display
+                                    if (
+                                        hasattr(self, "display_manager")
+                                        and self.display_manager
+                                    ):
+                                        self.display_manager.show_tool_call(
+                                            function_name
+                                        )
+                                    else:
+                                        # Fallback display
+                                        pass
                                 self.handle_tool_call(tool_call)
 
                         content = delta.get("content", "")
@@ -108,7 +110,15 @@ class StreamingHandler:
                                 first_content = False
 
                             if not silent:
-                                print(content, end="", flush=True)
+                                # Use display manager for streaming content
+                                if (
+                                    hasattr(self, "display_manager")
+                                    and self.display_manager
+                                ):
+                                    self.display_manager.stream_content(content)
+                                else:
+                                    # Fallback - no output
+                                    pass
                             full_response += content
 
                     except json.JSONDecodeError:
@@ -119,7 +129,12 @@ class StreamingHandler:
             self.logger.error(f"Error processing streaming response: {e}")
 
         if not silent and full_response:
-            print()  # New line after streaming
+            # Use display manager to end streaming
+            if hasattr(self, "display_manager") and self.display_manager:
+                self.display_manager.end_streaming()
+            else:
+                # Fallback - no newline needed
+                pass
         return full_response
 
     def handle_tool_call(self, tool_call: Dict[str, Any]) -> None:
@@ -132,7 +147,12 @@ class StreamingHandler:
         # In a full implementation, this would execute the tool
         function_name = tool_call.get("function", {}).get("name", "unknown")
         self.logger.info(f"LLM requested tool call: {function_name}")
-        print(f"\n⚡ Executing tool: {function_name}")  # Enhanced display
+        # Use display manager for tool call display
+        if hasattr(self, "display_manager") and self.display_manager:
+            self.display_manager.show_tool_call(function_name)
+        else:
+            # Fallback display
+            pass
 
     def handle_streaming_with_tools(
         self,
@@ -178,7 +198,7 @@ class StreamingHandler:
 
         # Show API request progress with smart timing-based progress
         api_progress = None
-        if self.progress_display_manager and not silent:
+        if self.display_manager and not silent:
             try:
                 # Get timing configuration
                 timing_config = self.config.get("tool_management.response_timing", {})
@@ -186,7 +206,7 @@ class StreamingHandler:
 
                 # Use the average time as the total for the progress bar
                 # This gives users a sense of expected completion time
-                api_progress = self.progress_display_manager.create_progress(
+                api_progress = self.display_manager.create_progress(
                     progress_token="api_request",
                     title="Waiting for AI response",
                     total=int(
@@ -277,7 +297,7 @@ class StreamingHandler:
                                 # Complete API progress when content starts arriving
                                 if api_progress:
                                     try:
-                                        api_progress.complete("AI responding")
+                                        api_progress.complete("")
                                     except Exception as e:
                                         self.logger.debug(
                                             f"Error completing API progress: {e}"
@@ -290,7 +310,15 @@ class StreamingHandler:
                                 first_content = False
 
                             if not silent:
-                                print(content, end="", flush=True)
+                                # Use display manager for streaming content
+                                if (
+                                    hasattr(self, "display_manager")
+                                    and self.display_manager
+                                ):
+                                    self.display_manager.stream_content(content)
+                                else:
+                                    # Fallback - no output
+                                    pass
                             full_response += content
 
                         # Handle tool calls
@@ -341,7 +369,12 @@ class StreamingHandler:
 
         # Only add newline if we actually streamed content and not silent
         if full_response and not silent:
-            print()  # New line after streaming
+            # Use display manager to end streaming
+            if hasattr(self, "display_manager") and self.display_manager:
+                self.display_manager.end_streaming()
+            else:
+                # Fallback - no newline needed
+                pass
 
         # Record response completion if not already recorded
         if self._response_start_time is not None:

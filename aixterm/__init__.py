@@ -12,6 +12,7 @@ __author__ = "AIxTerm Team"
 from .cleanup import CleanupManager
 from .config import AIxTermConfig
 from .context import TerminalContext
+from .display import DisplayManager, create_display_manager
 from .llm import LLMClient
 from .mcp_client import MCPClient
 
@@ -19,6 +20,8 @@ __all__ = [
     "__main__",
     "AIxTermConfig",
     "TerminalContext",
+    "DisplayManager",
+    "create_display_manager",
     "LLMClient",
     "MCPClient",
     "CleanupManager",

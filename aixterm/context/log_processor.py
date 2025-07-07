@@ -408,7 +408,7 @@ class LogProcessor:
         # Tier 2: Middle commands (moderate detail)
         if middle_commands:
             summary_parts.append(
-                f"\n📝 Earlier commands (previous {len(middle_commands)}):"
+                f"\nEarlier commands (previous {len(middle_commands)}):"
             )
             for cmd, output in middle_commands:
                 summary_parts.append(f"$ {cmd}")
@@ -430,7 +430,7 @@ class LogProcessor:
                 cmd_counts[base_cmd] = cmd_counts.get(base_cmd, 0) + 1
 
             summary_parts.append(
-                f"\n📊 Session history ({len(older_commands)} earlier commands):"
+                f"\nSession history ({len(older_commands)} earlier commands):"
             )
             for cmd, count in sorted(
                 cmd_counts.items(), key=lambda x: x[1], reverse=True
