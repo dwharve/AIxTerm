@@ -23,7 +23,13 @@ class TestAIxTermConfig:
         assert config.get("context_size") == 4096  # Updated to match new default
         assert config.get("response_buffer_size") == 1024  # Check new parameter
         assert isinstance(config.get("mcp_servers"), list)
-        assert len(config.get("mcp_servers")) == 0
+        assert (
+            len(config.get("mcp_servers")) == 1
+        )  # pythonium server included by default
+        # Verify pythonium server is configured correctly
+        pythonium_server = config.get("mcp_servers")[0]
+        assert pythonium_server["command"] == "python -m pythonium"
+        assert pythonium_server["args"] == ["serve"]
 
     def test_load_existing_config(self, temp_dir, monkeypatch):
         """Test loading existing configuration file."""

@@ -15,8 +15,15 @@ class TestBaseIntegration:
 
     def test_base_integration_is_abstract(self):
         """Test that BaseIntegration cannot be instantiated directly."""
-        with pytest.raises(TypeError):
-            BaseIntegration()
+        import logging
+
+        logger = logging.getLogger("test")
+        with pytest.raises(TypeError) as excinfo:
+            # This should raise TypeError due to abstract methods
+            BaseIntegration(logger)  # type: ignore
+
+        # Verify the error mentions abstract class
+        assert "abstract class" in str(excinfo.value)
 
     def test_get_integration_marker(self):
         """Test integration marker generation."""

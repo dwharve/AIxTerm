@@ -35,6 +35,13 @@ class TestLogProcessorTTYValidation:
 
     def test_get_current_tty(self, log_processor):
         """Test TTY detection."""
+        # Skip test on Windows where os.ttyname doesn't exist
+        if not hasattr(os, "ttyname"):
+            # On Windows, we expect the function to handle this case
+            tty = log_processor._get_current_tty()
+            assert tty is None
+            return
+
         # Test when no TTY is available (common in test environments)
         with patch("os.ttyname", side_effect=OSError("Not a tty")):
             with patch("sys.stdin.fileno", side_effect=OSError("No fileno")):

@@ -1,5 +1,6 @@
 """Pytest configuration and fixtures."""
 
+import asyncio
 import shutil
 import tempfile
 from pathlib import Path
@@ -12,6 +13,26 @@ from aixterm.config import AIxTermConfig
 from aixterm.context import TerminalContext
 from aixterm.llm import LLMClient
 from aixterm.mcp_client import MCPClient
+
+
+def mock_coro(return_value=None):
+    """
+    Create a mock coroutine function that returns the specified value.
+
+    This helper function can be used to mock async functions without causing
+    "coroutine was never awaited" warnings during tests.
+
+    Args:
+        return_value: The value to be returned when the coroutine is awaited.
+
+    Returns:
+        A coroutine function that returns the specified value.
+    """
+
+    async def mock_async_function(*args, **kwargs):
+        return return_value
+
+    return mock_async_function
 
 
 @pytest.fixture

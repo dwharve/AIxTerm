@@ -218,3 +218,22 @@ class TokenManager:
             total += 50  # Conservative overhead estimate
 
             return total
+
+    def get_token_budget(self) -> dict:
+        """Get token budget information.
+
+        Returns:
+            Dictionary with token budget details
+        """
+        total_context = self.config.get_total_context_size()
+        response_buffer = self.config.get_response_buffer_size()
+        tool_reserve = self.config.get_tool_tokens_reserve()
+
+        return {
+            "total_context_size": total_context,
+            "response_buffer": response_buffer,
+            "tool_reserve": tool_reserve,
+            "available_for_context": total_context
+            - response_buffer
+            - int(tool_reserve),
+        }

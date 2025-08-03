@@ -6,6 +6,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from aixterm.mcp_client import MCPClient, MCPError, MCPServer
+from tests.conftest import mock_coro
 
 
 class TestMCPClient:
@@ -218,28 +219,35 @@ class TestMCPServer:
         mock_future.result.side_effect = Exception("Start failed")
         mock_run_coro.return_value = mock_future
 
-        server = MCPServer(config, mock_logger, mock_loop)
+        # Mock the coroutine to avoid warnings
+        with patch.object(MCPServer, "_initialize_session", mock_coro()):
+            server = MCPServer(config, mock_logger, mock_loop)
 
-        with pytest.raises(MCPError, match="Failed to start MCP server"):
-            server.start()
+            with pytest.raises(MCPError, match="Failed to start MCP server"):
+                server.start()
 
     def test_stop_server(self, config, mock_logger, mock_loop):
         """Test stopping server."""
-        server = MCPServer(config, mock_logger, mock_loop)
-        server._initialized = True
-        server._session = Mock()
+        # Mock the coroutine methods to avoid warnings
+        with (
+            patch.object(MCPServer, "_initialize_session", mock_coro()),
+            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+        ):
+            server = MCPServer(config, mock_logger, mock_loop)
+            server._initialized = True
+            server._session = Mock()
 
-        with patch(
-            "aixterm.mcp_client.asyncio.run_coroutine_threadsafe"
-        ) as mock_run_coro:
-            mock_future = Mock()
-            mock_future.result.return_value = None
-            mock_run_coro.return_value = mock_future
+            with patch(
+                "aixterm.mcp_client.asyncio.run_coroutine_threadsafe"
+            ) as mock_run_coro:
+                mock_future = Mock()
+                mock_future.result.return_value = None
+                mock_run_coro.return_value = mock_future
 
-            server.stop()
+                server.stop()
 
-            assert not server._initialized
-            assert server._session is None
+                assert not server._initialized
+                assert server._session is None
 
     def test_is_running(self, config, mock_logger, mock_loop):
         """Test is_running status."""
@@ -278,22 +286,28 @@ class TestMCPServer:
     @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
     def test_list_tools(self, mock_run_coro, config, mock_logger, mock_loop):
         """Test listing tools."""
-        server = MCPServer(config, mock_logger, mock_loop)
-        server._initialized = True
-        server._session = Mock()
+        # Mock the coroutine methods to avoid warnings
+        with (
+            patch.object(MCPServer, "_initialize_session", mock_coro()),
+            patch.object(MCPServer, "_list_tools_async", mock_coro()),
+            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+        ):
+            server = MCPServer(config, mock_logger, mock_loop)
+            server._initialized = True
+            server._session = Mock()
 
-        # Mock the async result
-        mock_tool = Mock()
-        mock_tool.name = "test_tool"
-        mock_tool.description = "Test tool"
-        mock_tool.inputSchema = {"type": "object"}
+            # Mock the async result
+            mock_tool = Mock()
+            mock_tool.name = "test_tool"
+            mock_tool.description = "Test tool"
+            mock_tool.inputSchema = {"type": "object"}
 
-        mock_result = Mock()
-        mock_result.tools = [mock_tool]
+            mock_result = Mock()
+            mock_result.tools = [mock_tool]
 
-        mock_future = Mock()
-        mock_future.result.return_value = mock_result
-        mock_run_coro.return_value = mock_future
+            mock_future = Mock()
+            mock_future.result.return_value = mock_result
+            mock_run_coro.return_value = mock_future
 
         tools = server.list_tools()
 
@@ -311,22 +325,29 @@ class TestMCPServer:
     @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
     def test_call_tool(self, mock_run_coro, config, mock_logger, mock_loop):
         """Test calling a tool."""
-        server = MCPServer(config, mock_logger, mock_loop)
-        server._initialized = True
-        server._session = Mock()
+        # Mock the coroutine methods to avoid warnings
+        with (
+            patch.object(MCPServer, "_initialize_session", mock_coro()),
+            patch.object(MCPServer, "_call_tool_async", mock_coro()),
+            patch.object(MCPServer, "_list_tools_async", mock_coro()),
+            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+        ):
+            server = MCPServer(config, mock_logger, mock_loop)
+            server._initialized = True
+            server._session = Mock()
 
-        # Mock the async result
-        mock_result = Mock()
-        mock_result.content = [Mock(text="Tool result")]
+            # Mock the async result
+            mock_result = Mock()
+            mock_result.content = [Mock(text="Tool result")]
 
-        mock_future = Mock()
-        mock_future.result.return_value = mock_result
-        mock_run_coro.return_value = mock_future
+            mock_future = Mock()
+            mock_future.result.return_value = mock_result
+            mock_run_coro.return_value = mock_future
 
-        result = server.call_tool("test_tool", {"arg": "value"})
+            result = server.call_tool("test_tool", {"arg": "value"})
 
-        assert result == "Tool result"
-        mock_run_coro.assert_called_once()
+            assert result == "Tool result"
+            mock_run_coro.assert_called_once()
 
     def test_call_tool_not_running(self, config, mock_logger, mock_loop):
         """Test calling tool when server not running."""

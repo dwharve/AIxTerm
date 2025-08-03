@@ -372,6 +372,25 @@ class MCPClient:
             }
         return status
 
+    def list_tools(self) -> List[Dict[str, Any]]:
+        """List all available tools from all servers.
+
+        Returns:
+            List of available tools with server information
+        """
+        tools = []
+        for server_name, server in self.servers.items():
+            if server.is_running():
+                try:
+                    server_tools = server.list_tools()
+                    for tool in server_tools:
+                        tools.append({"server": server_name, "function": tool})
+                except Exception as e:
+                    self.logger.error(
+                        f"Error listing tools from server '{server_name}': {e}"
+                    )
+        return tools
+
 
 class MCPServer:
     """Represents a single MCP server instance using the official SDK."""

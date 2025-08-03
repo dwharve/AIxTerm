@@ -14,6 +14,7 @@ from aixterm.mcp_client import (
     ProgressCallback,
     ProgressParams,
 )
+from tests.conftest import mock_coro
 
 
 class TestProgressParams(unittest.TestCase):
@@ -369,15 +370,23 @@ class TestMCPClient(unittest.TestCase):
 
     def test_shutdown_with_server_error(self):
         """Test shutdown when server stop fails."""
-        mock_server = Mock()
-        mock_server.stop.side_effect = Exception("Stop error")
+        # Mock coroutines to avoid warnings
+        with (
+            patch.object(MCPServer, "_initialize_session", mock_coro()),
+            patch.object(MCPServer, "_call_tool_async", mock_coro()),
+            patch.object(MCPServer, "_list_tools_async", mock_coro()),
+            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+        ):
 
-        self.client.servers["test-server"] = mock_server
-        self.client._initialized = True
+            mock_server = Mock()
+            mock_server.stop.side_effect = Exception("Stop error")
 
-        with patch.object(self.client.logger, "error") as mock_error:
-            self.client.shutdown()
-            mock_error.assert_called()
+            self.client.servers["test-server"] = mock_server
+            self.client._initialized = True
+
+            with patch.object(self.client.logger, "error") as mock_error:
+                self.client.shutdown()
+                mock_error.assert_called()
 
     def test_get_server_status(self):
         """Test getting server status."""
@@ -404,14 +413,21 @@ class TestMCPClient(unittest.TestCase):
 
     def test_get_server_status_not_running(self):
         """Test getting server status when not running."""
-        mock_server = Mock()
-        mock_server.is_running.return_value = False
-        mock_server.get_pid.return_value = None
-        mock_server.get_uptime.return_value = None
+        # Mock coroutines to avoid warnings
+        with (
+            patch.object(MCPServer, "_initialize_session", mock_coro()),
+            patch.object(MCPServer, "_list_tools_async", mock_coro()),
+            patch.object(MCPServer, "_call_tool_async", mock_coro()),
+            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+        ):
+            mock_server = Mock()
+            mock_server.is_running.return_value = False
+            mock_server.get_pid.return_value = None
+            mock_server.get_uptime.return_value = None
 
-        self.client.servers["test-server"] = mock_server
+            self.client.servers["test-server"] = mock_server
 
-        status = self.client.get_server_status()
+            status = self.client.get_server_status()
 
         expected = {
             "test-server": {
@@ -462,11 +478,18 @@ class TestMCPServer(unittest.TestCase):
 
     def test_server_initialization(self):
         """Test server initialization."""
-        self.assertEqual(self.server.config, self.config)
-        self.assertEqual(self.server.logger, self.mock_logger)
-        self.assertEqual(self.server.loop, self.mock_loop)
-        self.assertIsNone(self.server._session)
-        self.assertFalse(self.server._initialized)
+        # Mock coroutines to avoid warnings
+        with (
+            patch.object(MCPServer, "_initialize_session", mock_coro()),
+            patch.object(MCPServer, "_list_tools_async", mock_coro()),
+            patch.object(MCPServer, "_call_tool_async", mock_coro()),
+            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+        ):
+            self.assertEqual(self.server.config, self.config)
+            self.assertEqual(self.server.logger, self.mock_logger)
+            self.assertEqual(self.server.loop, self.mock_loop)
+            self.assertIsNone(self.server._session)
+            self.assertFalse(self.server._initialized)
 
     def test_is_running_false(self):
         """Test is_running when server is not running."""
@@ -505,15 +528,22 @@ class TestMCPServer(unittest.TestCase):
 
     def test_stop_server(self):
         """Test stopping server."""
-        self.server._initialized = True
-        self.server._session = Mock()
+        # Mock coroutines to avoid warnings
+        with (
+            patch.object(MCPServer, "_initialize_session", mock_coro()),
+            patch.object(MCPServer, "_list_tools_async", mock_coro()),
+            patch.object(MCPServer, "_call_tool_async", mock_coro()),
+            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+        ):
+            self.server._initialized = True
+            self.server._session = Mock()
 
-        with patch(
-            "aixterm.mcp_client.asyncio.run_coroutine_threadsafe"
-        ) as mock_run_coro:
-            mock_future = Mock()
-            mock_future.result.return_value = None
-            mock_run_coro.return_value = mock_future
+            with patch(
+                "aixterm.mcp_client.asyncio.run_coroutine_threadsafe"
+            ) as mock_run_coro:
+                mock_future = Mock()
+                mock_future.result.return_value = None
+                mock_run_coro.return_value = mock_future
 
             self.server.stop()
 
@@ -527,18 +557,24 @@ class TestMCPServer(unittest.TestCase):
 
     def test_stop_server_exception(self):
         """Test exception during server stop."""
-        self.server._initialized = True
-        self.server._session = Mock()
+        # Mock coroutines to avoid warnings
+        with (
+            patch.object(MCPServer, "_initialize_session", mock_coro()),
+            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+        ):
 
-        with patch(
-            "aixterm.mcp_client.asyncio.run_coroutine_threadsafe"
-        ) as mock_run_coro:
-            mock_future = Mock()
-            mock_future.result.side_effect = Exception("Stop failed")
-            mock_run_coro.return_value = mock_future
+            self.server._initialized = True
+            self.server._session = Mock()
 
-            # Should not raise, just log
-            self.server.stop()
+            with patch(
+                "aixterm.mcp_client.asyncio.run_coroutine_threadsafe"
+            ) as mock_run_coro:
+                mock_future = Mock()
+                mock_future.result.side_effect = Exception("Stop failed")
+                mock_run_coro.return_value = mock_future
+
+                # Should not raise, just log
+                self.server.stop()
 
     def test_get_pid_no_process(self):
         """Test get_pid (always returns None with SDK)."""
@@ -550,7 +586,9 @@ class TestMCPServer(unittest.TestCase):
 
     def test_get_uptime_no_start_time(self):
         """Test get_uptime when not started."""
-        self.assertIsNone(self.server.get_uptime())
+        # Mock coroutines to avoid warnings
+        with patch.object(MCPServer, "_call_tool_async", mock_coro()):
+            self.assertIsNone(self.server.get_uptime())
 
     def test_get_uptime_with_start_time(self):
         """Test get_uptime with start time."""
@@ -568,13 +606,20 @@ class TestMCPServer(unittest.TestCase):
     @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
     def test_list_tools_cached(self, mock_run_coro):
         """Test listing tools with caching."""
-        self.server._initialized = True
-        self.server._session = Mock()
+        # Mock coroutines to avoid warnings
+        with (
+            patch.object(MCPServer, "_initialize_session", mock_coro()),
+            patch.object(MCPServer, "_list_tools_async", mock_coro()),
+            patch.object(MCPServer, "_call_tool_async", mock_coro()),
+            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+        ):
+            self.server._initialized = True
+            self.server._session = Mock()
 
-        # Set up cache
-        cached_tools = [{"type": "function", "function": {"name": "cached_tool"}}]
-        self.server._tools_cache = cached_tools
-        self.server._tools_cache_time = time.time()
+            # Set up cache
+            cached_tools = [{"type": "function", "function": {"name": "cached_tool"}}]
+            self.server._tools_cache = cached_tools
+            self.server._tools_cache_time = time.time()
 
         tools = self.server.list_tools(brief=True)
 

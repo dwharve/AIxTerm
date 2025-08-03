@@ -2,6 +2,16 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+[tool.isort]
+profile = "black"
+line_length = 120
+multi_line_output = 3
+include_trailing_comma = true
+force_grid_wrap = 0
+use_parentheses = true
+ensure_newline_before_comments = true
+known_first_party = ["aixterm"]
+
 [project]
 name = "aixterm"
 version = "0.1.4"
@@ -67,9 +77,23 @@ packages = ["aixterm"]
 aixterm = ["py.typed"]
 
 [tool.black]
-line-length = 88
-target-version = ['py310']
+line-length = 100
+target-version = ["py310", "py311"]
 include = '\.pyi?$'
+exclude = '''
+/(
+    \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
 extend-exclude = '''
 /(
   # directories
@@ -86,27 +110,9 @@ extend-exclude = '''
 )/
 '''
 
-[tool.isort]
-profile = "black"
-multi_line_output = 3
-line_length = 88
-known_first_party = ["aixterm"]
+# This section was removed as it caused duplicate configuration issues
 
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_no_return = true
-warn_unreachable = true
-strict_equality = true
-ignore_missing_imports = true
+# Mypy configuration is at the top level of this file
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

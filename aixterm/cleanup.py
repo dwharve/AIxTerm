@@ -375,3 +375,56 @@ class CleanupManager:
         """Enable automatic cleanup."""
         self.config.set("cleanup.enabled", True)
         self.logger.info("Automatic cleanup enabled")
+
+    def _get_log_dir(self) -> Path:
+        """Get the directory where log files are stored.
+
+        Returns:
+            Path to the log directory (user's home directory)
+        """
+        return Path.home()
+
+    def shutdown(self) -> None:
+        """Shutdown the cleanup manager and release resources."""
+        self.logger.debug("Shutting down CleanupManager")
+        # Nothing specific to clean up at the moment
+
+    def get_stats(self) -> Dict[str, Any]:
+        """Get cleanup statistics and status.
+
+        Returns:
+            Dictionary with cleanup statistics and status
+        """
+        # Collect cleanup statistics
+        try:
+            # Find log directory
+            log_dir = self._get_log_dir()
+            log_files = list(log_dir.glob("*.log")) if log_dir.exists() else []
+
+            # Calculate total size
+            total_size_bytes = sum(f.stat().st_size for f in log_files if f.exists())
+            total_size = format_file_size(total_size_bytes)
+
+            # Get last cleanup time
+            last_cleanup_time = (
+                "Never"
+                if self._last_cleanup == 0.0
+                else datetime.fromtimestamp(self._last_cleanup).isoformat()
+            )
+
+            # Get next cleanup time
+            next_cleanup_due = self._get_next_cleanup_time()
+
+            return {
+                "cleanup_enabled": self.config.get("cleanup.enabled", True),
+                "log_files_count": len(log_files),
+                "total_log_size": total_size,
+                "last_cleanup": last_cleanup_time,
+                "next_cleanup_due": next_cleanup_due,
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting cleanup stats: {e}")
+            return {
+                "cleanup_enabled": self.config.get("cleanup.enabled", True),
+                "error": str(e),
+            }

@@ -51,12 +51,12 @@ class AIxTermServer:
         self.server = HTTPServer((host, port), handler)
 
         try:
-            print(f"AIxTerm server running on http://{host}:{port}")
-            print("Endpoints:")
-            print("  POST /query - Send AI queries")
-            print("  GET /status - Get server status")
-            print("  GET /tools - List available tools")
-            print("Press Ctrl+C to stop")
+            self.logger.info(f"AIxTerm server running on http://{host}:{port}")
+            self.logger.info("Endpoints:")
+            self.logger.info("  POST /query - Send AI queries")
+            self.logger.info("  GET /status - Get server status")
+            self.logger.info("  GET /tools - List available tools")
+            self.logger.info("Press Ctrl+C to stop")
 
             self.server.serve_forever()
         except KeyboardInterrupt:

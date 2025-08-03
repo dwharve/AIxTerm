@@ -77,7 +77,8 @@ class TestModularTerminalContext:
             def mock_ttyname(_):
                 return "/dev/pts/0"
 
-            os.ttyname = mock_ttyname
+            if not hasattr(os, "ttyname"):
+                os.ttyname = mock_ttyname  # type: ignore
             try:
                 with patch.object(sys.stdin, "fileno", return_value=0):
                     log_path = context_manager.log_processor.find_log_file()

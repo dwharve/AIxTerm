@@ -5,6 +5,26 @@ All notable changes to AIxTerm will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Completed fully modular log processor implementation
+  - New specialized modules: processor.py, parsing.py, tokenization.py, tty_utils.py, summary.py
+  - Improved TTY detection across all platforms
+  - Advanced intelligent summarization of terminal history
+  - Enhanced command extraction and token management
+  - Fully compatible API with existing integration points
+
+### Changed
+- Updated documentation to reflect modular context architecture
+- Improved terminal_context.py documentation and class structure
+- Enhanced code quality with proper type hints and docstrings
+
+### Fixed
+- Resolved backward compatibility issues in the context module
+- Fixed error handling in TTY validation logic
+- Improved token counting accuracy in log processing
+
 ## [0.1.4] - 2025-07-05
 
 ### Changed

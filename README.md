@@ -13,10 +13,13 @@ An AI-powered command-line assistant that helps you discover and execute shell c
 - **Cross-Platform**: Works on Windows, macOS, and Linux with platform-specific command detection
 
 ### Enhanced Context System
+- **Fully Modular Architecture**: Specialized components for directory analysis, log processing, token management, and tool optimization
+- **Advanced Log Processing**: Complete modular implementation with specialized components for TTY detection, parsing, tokenization, and intelligent summarization
 - **File Context Integration**: Include specific files as context using `--file` flag (can be used multiple times)
-- **Smart Context Summarization**: Intelligently summarizes terminal history to provide relevant context without overwhelming the LLM
+- **Smart Context Summarization**: Tiered summarization of terminal history with command grouping and error highlighting
 - **Project Detection**: Automatically detects project types (Python, Node.js, Java, etc.) for better context
 - **Directory Analysis**: Provides intelligent summaries of current directory structure and important files
+- **TTY-based Log Processing**: Isolates terminal sessions for accurate context with cross-platform support
 
 ### Advanced Features
 - **MCP Server Support**: Integrates with Model Context Protocol servers for extended functionality

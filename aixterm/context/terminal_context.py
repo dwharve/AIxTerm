@@ -1,4 +1,9 @@
-"""Main terminal context management class."""
+"""Main terminal context management class.
+
+This module provides the central coordination point for AIxTerm's context management system,
+integrating the modular components for directory analysis, log processing, token management,
+and tool optimization into a cohesive system.
+"""
 
 import os
 from pathlib import Path
@@ -12,7 +17,16 @@ from .tool_optimizer import ToolOptimizer
 
 
 class TerminalContext:
-    """Manages terminal context and log file operations."""
+    """Manages terminal context and log file operations.
+
+    The TerminalContext class serves as the main coordinator for AIxTerm's context management
+    system, integrating several specialized components:
+
+    - DirectoryHandler: For file and project context
+    - LogProcessor: For terminal history and log processing using a modular implementation
+    - TokenManager: For token counting and budget management
+    - ToolOptimizer: For intelligent tool selection
+    """
 
     def __init__(self, config_manager: Any) -> None:
         """Initialize terminal context manager.
@@ -234,7 +248,9 @@ class TerminalContext:
                 log_content = f.read()
 
             # Parse into conversation messages
-            messages = self.log_processor.parse_conversation_history(log_content)
+            from ..context.log_processor.parsing import extract_conversation_from_log
+
+            messages = extract_conversation_from_log(log_content)
 
             # Filter and limit messages to fit in token budget
             filtered_messages: List[Dict[str, str]] = []
@@ -243,7 +259,10 @@ class TerminalContext:
             # Work backwards from most recent messages
             for message in reversed(messages):
                 message_tokens = self.token_manager.estimate_tokens(message["content"])
-                if total_tokens + message_tokens <= max_tokens:
+                if (
+                    max_tokens is not None
+                    and total_tokens + message_tokens <= max_tokens
+                ):
                     filtered_messages.insert(0, message)
                     total_tokens += message_tokens
                 else:
@@ -311,3 +330,116 @@ class TerminalContext:
             True if context was cleared, False if no context was found
         """
         return self.log_processor.clear_session_context()
+
+    def update_context(self, query: str, force_collect: bool = True) -> None:
+        """Update context with new query information.
+
+        Args:
+            query: The user query to add to context
+            force_collect: Whether to force context collection
+        """
+        try:
+            # Create a log entry for the current query
+            if force_collect:
+                self.create_log_entry(f"User: {query}")
+            self.logger.debug("Context updated with new query")
+        except Exception as e:
+            self.logger.error(f"Error updating context: {e}")
+
+    def add_file_context(self, file_path: str, file_content: str) -> None:
+        """Add file content to the current context.
+
+        Args:
+            file_path: Path to the file
+            file_content: Content of the file
+        """
+        self.logger.info(f"Adding file context for {file_path}")
+
+        # Store the file content in the log for context
+        self.create_log_entry(f"File {file_path}:\n{file_content}\n")
+        self.logger.debug(f"File context added for {file_path}")
+
+    def store_interaction(self, query: str, response: Any) -> None:
+        """Store an interaction in the context log.
+
+        Args:
+            query: User query
+            response: LLM response data
+        """
+        try:
+            # Get response content from either string or dict format
+            response_content = response
+            if isinstance(response, dict) and "content" in response:
+                response_content = response["content"]
+
+            # Add to log
+            self.create_log_entry(f"Assistant: {response_content}")
+            self.logger.debug("Interaction stored in context log")
+        except Exception as e:
+            self.logger.error(f"Error storing interaction: {e}")
+
+    def get_context_stats(self) -> Dict[str, Any]:
+        """Get statistics about the context system.
+
+        Returns:
+            Dictionary with context statistics
+        """
+        import time
+
+        stats = {}
+
+        # Log processor stats
+        try:
+            log_path = self.log_processor.find_log_file()
+            if log_path and log_path.exists():
+                log_size = log_path.stat().st_size
+                log_modified = log_path.stat().st_mtime
+                stats["log_info"] = {
+                    "log_file": str(log_path),
+                    "log_size": f"{log_size / 1024:.1f} KB",
+                    "last_modified": time.ctime(log_modified),
+                }
+            else:
+                stats["log_info"] = {
+                    "log_file": "None",
+                    "log_size": "N/A",
+                    "last_modified": "N/A",
+                }
+        except Exception as e:
+            self.logger.error(f"Error getting log stats: {e}")
+            stats["log_info"] = {"error": str(e)}
+
+        # Token management stats
+        try:
+            stats["token_info"] = {
+                "context_tokens": self.config.get("context_tokens", "default"),
+                "token_budget": self.token_manager.get_token_budget(),
+                "smart_features": self.config.get("smart_context", True),
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting token stats: {e}")
+            stats["token_info"] = {"error": str(e)}
+
+        # Directory context stats
+        try:
+            stats["directory_info"] = {
+                "current_dir": os.getcwd(),
+                "tty_isolation": True,
+                "workspace_detection": self.config.get("workspace_detection", True),
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting directory stats: {e}")
+            stats["directory_info"] = {"error": str(e)}
+
+        return stats
+
+    def shutdown(self) -> None:
+        """Shutdown the context manager and release resources."""
+        self.logger.debug("Shutting down terminal context")
+
+        # Nothing specific to clean up at the moment
+        # Components like log processor don't have shutdown methods
+        # This method exists to fulfill the shutdown protocol
+        # required by the AIxTerm application
+
+        self.logger.debug("Terminal context shutdown complete")

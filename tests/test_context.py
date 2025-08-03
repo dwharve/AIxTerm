@@ -60,7 +60,8 @@ class TestTerminalContext:
             def mock_ttyname(_):
                 return "/dev/pts/0"
 
-            os.ttyname = mock_ttyname
+            if not hasattr(os, "ttyname"):
+                os.ttyname = mock_ttyname  # type: ignore
             try:
                 with patch.object(sys.stdin, "fileno", return_value=0):
                     with patch.object(context_manager.config, "get", return_value=200):
@@ -204,7 +205,8 @@ class TestTerminalContext:
             def mock_ttyname(_):
                 return "/dev/pts/1"
 
-            os.ttyname = mock_ttyname
+            if not hasattr(os, "ttyname"):
+                os.ttyname = mock_ttyname  # type: ignore
             try:
                 with patch.object(sys.stdin, "fileno", return_value=0):
                     log_path = context_manager.log_processor._get_current_log_file()
