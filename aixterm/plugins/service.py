@@ -5,7 +5,7 @@ This module provides handlers for integrating plugins with the AIxTerm service.
 """
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
@@ -337,9 +337,13 @@ class PluginServiceHandlers:
                 }
 
             # Route the command to the plugin
-            return self.service.plugin_manager.handle_request(
+            response = self.service.plugin_manager.handle_request(
                 plugin_id, {"command": command, "data": data}
             )
+            # Ensure a dictionary response
+            if isinstance(response, dict):
+                return response
+            return {"status": "error", "error": {"code": "invalid_response"}}
 
         except Exception as e:
             self.logger.error(f"Error executing plugin command: {e}")

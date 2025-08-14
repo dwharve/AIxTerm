@@ -1,8 +1,6 @@
 """Terminal utilities for the display module."""
 
 import sys
-import time
-from typing import Any
 
 
 def clear_terminal():

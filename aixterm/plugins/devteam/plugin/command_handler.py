@@ -1,15 +1,15 @@
+import asyncio
+
 """
 Command handler module for the DevTeam plugin.
 
 This module provides command handling functionality for the DevTeam plugin.
 """
 
-import asyncio
-import json
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict
 
-from ..modules.types import TaskPriority, TaskStatus, TaskType, WorkflowStatus
+from ..modules.types import TaskPriority, TaskStatus, TaskType
 from ..modules.workflow_engine import WorkflowStep
 
 logger = logging.getLogger(__name__)
@@ -296,7 +296,7 @@ class DevTeamCommandHandler:
             return {
                 "success": True,
                 "message": f"Task {task_id} cancelled"
-                + (f" and workflow cancelled" if workflow_cancelled else ""),
+                + (" and workflow cancelled" if workflow_cancelled else ""),
             }
         except Exception as e:
             logger.error(f"Error cancelling task: {e}")
@@ -587,7 +587,7 @@ class DevTeamCommandHandler:
                 task = self._task_manager.get_task(task_id)
 
             # Get step agent type
-            agent_type = step.agent_type if hasattr(step, "agent_type") else "developer"
+            agent_type = getattr(step, "agent_type", "developer")
 
             # Get agent from registry
             agent = self._agent_registry.get_agent(agent_type)
@@ -595,7 +595,10 @@ class DevTeamCommandHandler:
                 raise ValueError(f"Agent not found for type: {agent_type}")
 
             # Execute step using agent
-            return await agent.execute_step(step, context, task)
+            result = await agent.execute_step(step, context, task)
+            if isinstance(result, dict):
+                return result
+            return {"success": True, "result": result}
         except Exception as e:
             logger.error(f"Error executing workflow step: {e}")
             return {

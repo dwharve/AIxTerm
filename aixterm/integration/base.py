@@ -9,13 +9,31 @@ from typing import Any, List, Optional
 class BaseIntegration(ABC):
     """Base class for shell integration implementations."""
 
-    def __init__(self, logger: Any) -> None:
+    def __init__(self, logger: Any | None = None) -> None:
         """Initialize the integration.
 
         Args:
             logger: Logger instance
         """
-        self.logger = logger
+        # Lazy default logger to avoid requiring subclasses to pass one
+        if logger is None:
+
+            class _NullLogger:
+                def debug(self, msg: str) -> None:  # pragma: no cover - simple stub
+                    pass
+
+                def info(self, msg: str) -> None:  # pragma: no cover - simple stub
+                    pass
+
+                def warning(self, msg: str) -> None:  # pragma: no cover - simple stub
+                    pass
+
+                def error(self, msg: str) -> None:  # pragma: no cover - simple stub
+                    pass
+
+            self.logger = _NullLogger()
+        else:
+            self.logger = logger
         self.integration_marker = "# AIxTerm Shell Integration"
 
     @property
@@ -311,7 +329,7 @@ class BaseIntegration(ABC):
                             or next_line.startswith("function ")
                             or next_line.startswith("then")
                             or next_line.startswith("else")
-                            or next_line.startswith("elif")
+                            or next_line.startswith("eli")
                             or next_line.startswith("end")  # fish
                             or next_line.startswith("begin")  # fish
                             or "test -" in next_line  # fish test
@@ -375,3 +393,26 @@ class BaseIntegration(ABC):
             self.logger.error(f"Error installing integration: {e}")
             print(f"Error: Failed to install integration: {e}")
             return False
+
+    def get_status(self) -> dict[str, Any]:
+        """Get integration installation status for this shell.
+
+        Returns:
+            A dictionary with status information.
+        """
+        try:
+            config_file = self.find_config_file()
+            installed = False
+            cfg_path = None
+            if config_file:
+                cfg_path = str(config_file)
+                installed = self.is_integration_installed(config_file)
+
+            return {
+                "shell": self.shell_name,
+                "installed": installed,
+                "config_file": cfg_path,
+            }
+        except Exception as e:  # pragma: no cover - defensive
+            self.logger.debug(f"Error getting integration status: {e}")
+            return {"shell": self.shell_name, "installed": False, "error": str(e)}

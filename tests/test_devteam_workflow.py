@@ -64,6 +64,7 @@ def test_devteam_submit_complex_task(devteam_plugin):
             - Two-factor authentication
             - Session management
             - RBAC (Role-Based Access Control)
+
             The system should follow security best practices and include comprehensive testing.
             """,
             "type": "feature",  # Can be feature, bug_fix, refactor, etc.
@@ -138,6 +139,7 @@ def test_devteam_task_with_subtasks(devteam_plugin):
             4. Request/Response transformation
             5. Logging and monitoring
             6. Circuit breaker pattern implementation
+
             The service should be containerized and include Swagger documentation.
             """,
             "type": "feature",

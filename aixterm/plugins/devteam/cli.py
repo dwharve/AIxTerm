@@ -1,3 +1,5 @@
+import json
+
 """
 DevTeam plugin CLI command integration.
 
@@ -5,10 +7,8 @@ This module provides command-line interface for the DevTeam plugin.
 """
 
 import argparse
-import json
 import logging
 import sys
-from typing import Any, Dict, List, Optional, TextIO, Union
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +87,10 @@ def add_devteam_commands(subparsers) -> None:
     )
 
     # Prompt metrics command
-    prompt_metrics_parser = subparsers.add_parser(
-        "prompt:metrics", help="Get prompt optimization metrics"
-    )
+    # Metrics parser not currently used
+    # _prompt_metrics_parser = subparsers.add_parser(
+    #     "prompt:metrics", help="Get prompt optimization metrics"
+    # )
 
     # Start prompt experiment command
     prompt_experiment_parser = subparsers.add_parser(
@@ -579,7 +580,7 @@ def _handle_prompt_metrics(args: argparse.Namespace, client) -> None:
                     efficiency = template.get("efficiency_score", 0)
 
                     print(
-                        f"    {i+1}. {name}: {success_rate:.1f}% success, {efficiency:.1f} efficiency"
+                        f"    {i + 1}. {name}: {success_rate:.1f}% success, {efficiency:.1f} efficiency"
                     )
 
             print()

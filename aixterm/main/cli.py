@@ -2,7 +2,7 @@
 
 import argparse
 import sys
-from typing import Any, Dict, List, Optional
+from typing import List, Optional
 
 from aixterm.utils import get_current_shell, get_logger
 
@@ -114,7 +114,7 @@ def parse_arguments() -> argparse.Namespace:
 
     # File options
     parser.add_argument(
-        "-f",
+        "-",
         "--file",
         action="append",
         metavar="PATH",

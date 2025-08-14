@@ -1,10 +1,11 @@
+import json
+
 """
 Configuration management for the DevTeam plugin.
 
 This module handles configuration loading, validation, and access for the DevTeam plugin.
 """
 
-import json
 import logging
 import os
 from pathlib import Path

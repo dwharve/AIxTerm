@@ -50,7 +50,7 @@ class AIxTerm(AIxTermApp):
 
     def run_cli_mode(self, *args, **kwargs) -> None:
         """Run AIxTerm in CLI mode."""
-        run_cli_mode(app=self, *args, **kwargs)
+        run_cli_mode(self, *args, **kwargs)
 
     def install_shell_integration(self, shell: str = "bash") -> None:
         """Install shell integration."""

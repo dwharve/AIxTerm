@@ -1,6 +1,5 @@
 """Status reporting and maintenance functionality for AIxTerm."""
 
-import datetime
 import os
 import platform
 from typing import Any, Dict

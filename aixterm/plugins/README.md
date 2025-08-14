@@ -14,7 +14,6 @@ The plugins module provides an extensible plugin system for AIxTerm, allowing cu
 
 ### Built-in Plugins
 - **DevTeam Plugin**: Comprehensive development team collaboration tools
-- **Hello Plugin**: Simple example plugin demonstrating basic functionality
 - **Core Plugins**: Essential plugins for basic AIxTerm functionality
 
 ## Architecture
@@ -24,7 +23,6 @@ plugins/
 ├── __init__.py          # Plugin system core and discovery
 ├── base.py              # Base plugin interface and utilities
 ├── devteam/             # Development team collaboration plugin
-├── hello/               # Example/demo plugin
 └── [custom]/            # User-defined custom plugins
 ```
 

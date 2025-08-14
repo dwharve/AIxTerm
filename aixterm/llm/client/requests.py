@@ -103,8 +103,8 @@ class RequestHandler:
             self.logger.debug("LLM response received successfully")
 
             if stream:
-                # For streaming, return the stream directly
-                return response
+                # Streaming responses are handled by streaming handler; return None
+                return None
             else:
                 # Convert OpenAI response to dict format for compatibility
                 content = response.choices[0].message.content

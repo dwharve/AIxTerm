@@ -5,7 +5,6 @@ This module provides functionality for agent management and registry.
 """
 
 import logging
-from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 

@@ -7,59 +7,49 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from .common import ServiceInstaller, is_admin
+from .common import ServiceInstaller
 
 logger = logging.getLogger(__name__)
 
 
 class LinuxServiceInstaller(ServiceInstaller):
-    """Service installer for Linux."""
+    """Linux-specific service installer using systemd."""
 
     def install(
         self, config_path: Optional[str] = None, user_mode: bool = True
     ) -> bool:
         """
-        Install the AIxTerm service on Linux.
+        Install the AIxTerm service on Linux using systemd.
 
         Args:
-            config_path: Optional path to a configuration file.
-            user_mode: Whether to install for the current user only.
+            service_path: Path to the service executable
+            user_mode: Whether to install for the current user only
 
         Returns:
-            True if installation was successful, False otherwise.
+            True if installation successful
         """
         try:
-            # Check if we're running with admin privileges for system-wide installation
-            if not user_mode and not is_admin():
-                logger.error("Root privileges required for system-wide installation")
-                return False
-
-            # Prepare service arguments
+            service_name = self._get_service_name()
+            # Resolve python and script paths
             python_exe = self._get_python_executable()
             script_path = self._get_aixterm_script()
-            service_name = self._get_service_name()
-
-            # Generate the systemd service file content
-            service_content = self._generate_systemd_service(
+            service_content = self._generate_service_file(
                 python_exe, script_path, config_path, user_mode
             )
 
-            # Determine where to write the service file
+            # Determine service directory
             if user_mode:
-                # User mode: write to user systemd directory
-                systemd_dir = os.path.expanduser("~/.config/systemd/user")
-                os.makedirs(systemd_dir, exist_ok=True)
+                service_dir = Path.home() / ".config" / "systemd" / "user"
             else:
-                # System mode: write to system systemd directory
-                systemd_dir = "/etc/systemd/system"
+                service_dir = Path("/etc/systemd/system")
 
-            service_file = os.path.join(systemd_dir, f"{service_name}.service")
+            service_dir.mkdir(parents=True, exist_ok=True)
+            service_file = service_dir / f"{service_name}.service"
 
             # Write service file
             with open(service_file, "w") as f:
                 f.write(service_content)
 
-            # Set permissions
             os.chmod(service_file, 0o644)
 
             # Reload systemd and enable/start service
@@ -129,8 +119,8 @@ class LinuxServiceInstaller(ServiceInstaller):
             # Get service name
             service_name = self._get_service_name()
 
-            # Check if we're in user mode
-            user_mode = not is_admin()
+            # Determine likely mode: prefer user mode when user systemd dir exists
+            user_mode = os.path.isdir(os.path.expanduser("~/.config/systemd/user"))
 
             # Build the systemctl command
             systemctl_cmd = "systemctl --user" if user_mode else "systemctl"
@@ -209,3 +199,15 @@ class LinuxServiceInstaller(ServiceInstaller):
         ]
 
         return "\n".join(content)
+
+    # Backward-compatibility shim for mypy which expects this method name
+    def _generate_service_file(
+        self,
+        python_exe: str,
+        script_path: str,
+        config_path: Optional[str],
+        user_mode: bool,
+    ) -> str:
+        return self._generate_systemd_service(
+            python_exe, script_path, config_path, user_mode
+        )

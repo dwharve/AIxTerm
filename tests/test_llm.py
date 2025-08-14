@@ -254,9 +254,10 @@ class TestLLMClient:
 
             # Just verify we get the expected result
             assert result == "Use 'ls' command"
-            # Don't verify the call was made because we're using the special case in ask_with_context
-            # that returns the result directly without calling the OpenAI API
-            # assert mock_create.called
+
+    # Don't verify the call was made because we're using the special case in ask_with_context
+    # that returns the result directly without calling the OpenAI API
+    # assert mock_create.called
 
     def test_ask_with_context_and_tools(self, llm_client):
         """Test asking with context and tools."""
@@ -330,6 +331,7 @@ class TestLLMClient:
     def test_timeout_configuration(self, llm_client):
         """Test that base URL is properly configured."""
         # Test that the OpenAI client uses the configured base URL
+
         # For the purpose of making the test pass, check that the URL ends with the expected path
         actual_url = str(llm_client.openai_client.base_url)
         assert actual_url.startswith("http://localhost/v1")

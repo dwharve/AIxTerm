@@ -1,8 +1,13 @@
-"""Tokenization and text processing utilities."""
+"""Token counting and text truncation utilities."""
 
-from typing import List, Optional, Tuple
+from typing import List, Optional
 
-import tiktoken
+try:
+    import tiktoken
+
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
 
 
 def tokenize_text(text: str, model_name: Optional[str] = None) -> List[int]:

@@ -2,8 +2,6 @@
 Tests for the DevTeam plugin.
 """
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from aixterm.plugins.devteam.modules.types import TaskStatus
@@ -85,7 +83,8 @@ def test_list_tasks(devteam_plugin):
         "command": "devteam:submit",
         "parameters": {"title": "Test Task", "description": "This is a test task"},
     }
-    submit_response = devteam_plugin.handle_request(submit_request)
+    # submit_response = devteam_plugin.handle_request(submit_request)
+    devteam_plugin.handle_request(submit_request)
 
     # List tasks
     list_request = {"command": "devteam:list", "parameters": {}}

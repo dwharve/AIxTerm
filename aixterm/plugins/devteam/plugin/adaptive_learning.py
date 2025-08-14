@@ -5,7 +5,6 @@ This module provides functionality for adaptive learning and prompt optimization
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 

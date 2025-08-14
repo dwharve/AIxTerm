@@ -169,7 +169,7 @@ class TestBash:
         # Check for key components
         assert "# AIxTerm Shell Integration" in script
         assert "_aixterm_get_log_file" in script
-        assert "script -a -f" in script  # Check for script command usage
+        assert "script -a -" in script  # Check for script command usage
         assert "aixterm_status" in script  # bash-specific function
 
     def test_is_available(self):

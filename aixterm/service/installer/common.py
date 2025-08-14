@@ -23,7 +23,10 @@ def is_admin() -> bool:
         try:
             import ctypes
 
-            return bool(ctypes.windll.shell32.IsUserAnAdmin() != 0)
+            shell32 = getattr(ctypes, "windll", None)
+            if shell32 is None:
+                return False
+            return bool(shell32.shell32.IsUserAnAdmin() != 0)
         except Exception:  # Use specific exception instead of bare except
             return False
     else:

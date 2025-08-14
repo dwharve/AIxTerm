@@ -12,7 +12,7 @@ DESCRIPTION = AI-powered terminal assistant for command line productivity
 # Directories
 BUILD_DIR = build
 PROJECT_ROOT = .
-VENV_DIR = venv
+VENV_DIR = ../.venv
 
 # Python configuration - use virtual environment if available
 PYTHON_BASE = python3
@@ -46,38 +46,38 @@ test-coverage:
 .PHONY: lint
 lint:
 	@echo "Running linter (flake8)..."
-	python3 -m flake8 aixterm/ tests/ --max-line-length=88 --ignore=E203,W503
+	$(PYTHON) -m flake8 aixterm/ tests/ --max-line-length=88 --ignore=E203,W503
 
 .PHONY: format
 format:
 	@echo "Formatting code with black..."
-	python3 -m black aixterm/ tests/ --line-length=88
+	$(PYTHON) -m black aixterm/ tests/ --line-length=88
 
 .PHONY: format-check
 format-check:
 	@echo "Checking code formatting..."
-	python3 -m black --check aixterm/ tests/ --line-length=88
+	$(PYTHON) -m black --check aixterm/ tests/ --line-length=88
 
 .PHONY: type-check
 type-check:
 	@echo "Running type checker (mypy)..."
-	python3 -m mypy aixterm/ --ignore-missing-imports --show-error-codes
+	$(PYTHON) -m mypy aixterm/ --ignore-missing-imports --show-error-codes
 
 .PHONY: security-check
 security-check:
 	@echo "Running security checks (bandit)..."
-	python3 -m bandit -r aixterm/ -f json -o security-report.json || true
+	$(PYTHON) -m bandit -r aixterm/ -f json -o security-report.json || true
 	@echo "Security report generated: security-report.json"
 
 .PHONY: import-sort
 import-sort:
 	@echo "Sorting imports..."
-	python3 -m isort aixterm/ tests/
+	$(PYTHON) -m isort aixterm/ tests/
 
 .PHONY: import-check
 import-check:
 	@echo "Checking import order..."
-	python3 -m isort --check-only aixterm/ tests/
+	$(PYTHON) -m isort --check-only aixterm/ tests/
 
 .PHONY: install-dev
 install-dev:

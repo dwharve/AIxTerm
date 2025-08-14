@@ -3,7 +3,6 @@ Windows service installer implementation.
 """
 
 import logging
-import os
 from typing import Any, Dict, Optional
 
 from .common import ServiceInstaller, is_admin
@@ -107,7 +106,6 @@ class WindowsServiceInstaller(ServiceInstaller):
         """
         try:
             # Import required modules
-            import win32service
             import win32serviceutil
 
             # Get service name
@@ -171,13 +169,13 @@ class WindowsServiceInstaller(ServiceInstaller):
                     win32service.SERVICE_PAUSED: "paused",
                 }
 
-                status_code = status_info[1]
-                status_string = status_map.get(status_code, f"unknown ({status_code})")
+                statuscode = status_info[1]
+                status_string = status_map.get(statuscode, f"unknown ({statuscode})")
 
                 return {
                     "installed": True,
                     "status": status_string,
-                    "code": status_code,
+                    "code": statuscode,
                     "service_name": service_name,
                 }
             except Exception as e:

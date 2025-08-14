@@ -239,15 +239,12 @@ class ToolOptimizer:
             - self.config.get_response_buffer_size()
         )
 
-        # Start with current messages and tools
-        current_messages = messages.copy()
+        # Start with current tools
         current_tools = tools.copy() if tools else None
 
         # Calculate total tokens needed
         def calculate_total_tokens() -> int:
-            msg_tokens = self.token_manager.count_tokens_for_messages(
-                current_messages, model
-            )
+            msg_tokens = self.token_manager.count_tokens_for_messages(messages, model)
             tool_tokens = (
                 self.token_manager.count_tokens_for_tools(current_tools, model)
                 if current_tools
@@ -263,7 +260,7 @@ class ToolOptimizer:
 
         # If we fit, return as-is
         if total_tokens <= max_context:
-            return {"messages": current_messages, "tools": current_tools}
+            return {"messages": messages, "tools": current_tools}
 
         self.logger.warning(
             f"Request too large ({total_tokens} tokens), applying context management"
@@ -282,7 +279,7 @@ class ToolOptimizer:
                         break
 
             available_tokens = self.token_manager.get_available_tool_tokens(
-                self.token_manager.count_tokens_for_messages(current_messages, model)
+                self.token_manager.count_tokens_for_messages(messages, model)
             )
             current_tools = self.optimize_tools_for_context(
                 current_tools, query_text, available_tokens
@@ -291,7 +288,7 @@ class ToolOptimizer:
 
             if total_tokens <= max_context:
                 self.logger.info("Optimized tools to fit context")
-                return {"messages": current_messages, "tools": current_tools}
+                return {"messages": messages, "tools": current_tools}
 
         # Step 2: If still too large, try without tools entirely
         if total_tokens > max_context:
@@ -300,7 +297,7 @@ class ToolOptimizer:
 
             if total_tokens <= max_context:
                 self.logger.warning("Removed all tools to fit context limit")
-                return {"messages": current_messages, "tools": None}
+                return {"messages": messages, "tools": None}
 
         # Step 3: Trim messages (import here to avoid circular imports)
         if total_tokens > max_context:
@@ -316,13 +313,13 @@ class ToolOptimizer:
             # Use token manager to trim messages
             # First, let's calculate how much we need to trim
             current_msg_tokens = self.token_manager.count_tokens_for_messages(
-                current_messages, model
+                messages, model
             )
             if current_msg_tokens > available_for_messages:
                 # Simple message trimming: keep system message and recent messages
                 trimmed_messages = []
-                if current_messages and current_messages[0].get("role") == "system":
-                    trimmed_messages.append(current_messages[0])
+                if messages and messages[0].get("role") == "system":
+                    trimmed_messages.append(messages[0])
 
                 # Add messages from the end until we reach the limit
                 remaining_tokens = (
@@ -332,9 +329,7 @@ class ToolOptimizer:
                     )
                 )
 
-                for msg in reversed(
-                    current_messages[1:] if trimmed_messages else current_messages
-                ):
+                for msg in reversed(messages[1:] if trimmed_messages else messages):
                     msg_tokens = self.token_manager.count_tokens_for_messages(
                         [msg], model
                     )
@@ -352,13 +347,11 @@ class ToolOptimizer:
                     else:
                         break
 
-                current_messages = trimmed_messages
-
             total_tokens = calculate_total_tokens()
 
             if total_tokens <= max_context:
                 final_msg_tokens = self.token_manager.count_tokens_for_messages(
-                    current_messages, model
+                    messages, model
                 )
                 final_tool_tokens = (
                     self.token_manager.count_tokens_for_tools(current_tools, model)
@@ -369,18 +362,18 @@ class ToolOptimizer:
                     f"Final context: {final_msg_tokens} message tokens + "
                     f"{final_tool_tokens} tool tokens = {total_tokens} total"
                 )
-                return {"messages": current_messages, "tools": current_tools}
+                return {"messages": messages, "tools": current_tools}
 
         # Step 4: Last resort - minimal payload
         if total_tokens > max_context:
             self.logger.error("Cannot fit request even with aggressive trimming")
             # Try with just system message and latest user message, no tools
             minimal_messages = []
-            if current_messages and current_messages[0].get("role") == "system":
-                minimal_messages.append(current_messages[0])
+            if messages and messages[0].get("role") == "system":
+                minimal_messages.append(messages[0])
 
             # Add the most recent user message
-            for msg in reversed(current_messages):
+            for msg in reversed(messages):
                 if msg.get("role") == "user":
                     minimal_messages.append(msg)
                     break

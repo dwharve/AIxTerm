@@ -1,7 +1,7 @@
 """Thinking content processing for LLM responses."""
 
 import re
-from typing import Any, Dict, Tuple
+from typing import Any, Tuple
 
 
 class ThinkingProcessor:

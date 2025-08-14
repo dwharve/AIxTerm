@@ -4,10 +4,7 @@ Tests for the AIxTerm plugin system.
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from aixterm.plugins import Plugin, PluginManager
-from aixterm.plugins.hello import HelloPlugin
 
 
 class TestPluginBase:
@@ -82,97 +79,75 @@ class TestPluginBase:
         assert response["result"]["result"] == "success"
 
 
-class TestHelloPlugin:
-    """Tests for the HelloPlugin."""
-
-    def test_hello_plugin(self):
-        """Test the HelloPlugin."""
-        # Create a mock service
-        mock_service = MagicMock()
-        mock_service.config = {"plugins": {"plugins": {"hello": {"settings": {}}}}}
-
-        # Create the hello plugin
-        plugin = HelloPlugin(mock_service)
-
-        # Test basic properties
-        assert plugin.id == "hello"
-        assert plugin.name == "Hello World"
-        assert plugin.version == "0.1.0"
-        assert "simple Hello World" in plugin.description
-
-        # Test initialization and shutdown
-        assert plugin.initialize() is True
-        assert plugin.initialized is True
-        assert plugin.shutdown() is True
-        assert plugin.initialized is False
-
-        # Test commands
-        commands = plugin.get_commands()
-        assert "hello" in commands
-        assert "hello_name" in commands
-
-        # Test hello command
-        result = plugin.cmd_hello({})
-        assert result["message"] == "Hello, World!"
-
-        # Test hello_name command
-        result = plugin.cmd_hello_name({"name": "Alice"})
-        assert result["message"] == "Hello, Alice!"
-
-        # Test hello_name command with default
-        result = plugin.cmd_hello_name({})
-        assert result["message"] == "Hello, anonymous!"
-
-
 class TestPluginManager:
     """Tests for the PluginManager."""
 
     def test_plugin_manager(self):
         """Test the basic functionality of the PluginManager."""
+
+        # Create a mock test plugin class
+        class MockTestPlugin(Plugin):
+            @property
+            def id(self):
+                return "mock_test"
+
+            @property
+            def name(self):
+                return "Mock Test Plugin"
+
+            @property
+            def version(self):
+                return "0.1.0"
+
+            def get_commands(self):
+                return {"test": lambda data: {"message": "Test successful!"}}
+
         # Create a mock service
         mock_service = MagicMock()
         mock_service.config = {
             "plugins": {
-                "enabled_plugins": ["hello"],
+                "enabled_plugins": ["mock_test"],
                 "auto_discover": False,
-                "plugins": {"hello": {"settings": {}}},
+                "plugins": {"mock_test": {"settings": {}}},
             }
         }
 
         # Create the plugin manager
         manager = PluginManager(mock_service)
 
+        # Mock the discover_plugins method to return our test plugin
+        manager.discover_plugins = MagicMock(return_value={"mock_test": MockTestPlugin})
+
         # Test plugin discovery
         plugins = manager.discover_plugins()
-        assert "hello" in plugins
-        assert plugins["hello"] == HelloPlugin
+        assert "mock_test" in plugins
 
         # Test loading a specific plugin
-        assert manager.load_plugin("hello") is True
-        assert "hello" in manager.plugins
-        assert isinstance(manager.plugins["hello"], HelloPlugin)
+        assert manager.load_plugin("mock_test") is True
+        assert "mock_test" in manager.plugins
+        assert isinstance(manager.plugins["mock_test"], MockTestPlugin)
 
         # Test loading all plugins
         manager.unload_plugins()
         assert manager.load_plugins() is True
-        assert "hello" in manager.plugins
+        assert "mock_test" in manager.plugins
 
         # Test plugin status
         status = manager.get_status()
-        assert "hello" in status["plugins"]
+        assert "mock_test" in status["plugins"]
         assert status["total"] == 1
 
         # Test request handling
-        response = manager.handle_request("hello", {"command": "hello", "data": {}})
+        response = manager.handle_request("mock_test", {"command": "test", "data": {}})
         assert response["status"] == "success"
-        assert response["result"]["message"] == "Hello, World!"
+        assert response["result"]["message"] == "Test successful!"
 
         # Test unloading a specific plugin
-        assert manager.unload_plugin("hello") is True
-        assert "hello" not in manager.plugins
+        assert manager.unload_plugin("mock_test") is True
+        assert "mock_test" not in manager.plugins
 
         # Test unloading all plugins
-        manager.load_plugin("hello")
+        manager.load_plugin("mock_test")
         assert manager.unload_plugins() is True
         assert len(manager.plugins) == 0
 

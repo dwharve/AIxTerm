@@ -174,9 +174,8 @@ class AIxTermApp:
             """
             # Create progress display
             progress = self.display_manager.create_progress(
-                title=title or "Processing",
+                token=progress_token or "default", title=title or "Processing"
             )
-            progress.start()
 
             def progress_callback(params: Any) -> None:
                 """Update progress based on parameters.
@@ -187,16 +186,33 @@ class AIxTermApp:
                 if params and isinstance(params, dict):
                     # Update progress based on parameters
                     if "completed" in params:
-                        progress.stop()
-                    elif "message" in params:
-                        progress.update(status=params["message"])
-                    elif "percent" in params:
-                        progress.update(percent=params["percent"])
+                        # mark complete with final message if present
+                        final_msg = params.get("message")
+                        self.display_manager.complete_progress(
+                            progress.token, final_msg
+                        )
+                    elif "message" in params or "percent" in params:
+                        msg = params.get("message")
+                        pct = params.get("percent")
+                        if isinstance(pct, (int, float)):
+                            self.display_manager.update_progress(
+                                progress.token, int(pct), msg
+                            )
+                        else:
+                            # keep current progress number but update message
+                            self.display_manager.update_progress(
+                                progress.token, progress.current_progress, msg
+                            )
                     else:
-                        progress.update()
+                        # simple tick
+                        self.display_manager.update_progress(
+                            progress.token, progress.current_progress + 1
+                        )
                 else:
                     # Simple update
-                    progress.update()
+                    self.display_manager.update_progress(
+                        progress.token, progress.current_progress + 1
+                    )
 
             return progress_callback
 

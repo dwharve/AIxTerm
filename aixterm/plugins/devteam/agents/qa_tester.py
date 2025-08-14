@@ -2,11 +2,11 @@
 DevTeam Plugin QA Tester Agent
 
 This module provides the QATesterAgent for the DevTeam plugin.
-This agent specializes in testing and quality assurance.
+This agent specializes in quality assurance and testing.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from . import Agent
 
@@ -79,8 +79,8 @@ class QATesterAgent(Agent):
         Returns:
             Test design results.
         """
-        requirements = task.get("requirements", {})
-        code = task.get("code", "")
+        # requirements = task.get("requirements", {})
+        # code = task.get("code", "")
 
         self.logger.debug(f"Designing tests for task: {task.get('description', '')}")
 
@@ -185,7 +185,7 @@ class QATesterAgent(Agent):
         Returns:
             Bug finding results.
         """
-        code = task.get("code", "")
+        # code = task.get("code", "")
         focus_areas = task.get(
             "focus_areas", ["security", "performance", "correctness"]
         )
@@ -251,7 +251,7 @@ class QATesterAgent(Agent):
             Verification results.
         """
         requirements = task.get("requirements", [])
-        implementation = task.get("implementation", "")
+        # implementation = task.get("implementation", "")
 
         self.logger.debug(f"Verifying {len(requirements)} requirements")
 

@@ -103,11 +103,11 @@ To create a new plugin:
 
 ### Example Plugin
 
-Here's a complete example of a simple "Hello World" plugin:
+Here's a complete example of a simple plugin:
 
 ```python
 """
-Hello World Plugin for AIxTerm
+Example Plugin for AIxTerm
 
 A simple example plugin that demonstrates the AIxTerm plugin system.
 """
@@ -117,9 +117,9 @@ from typing import Any, Dict, Callable
 from aixterm.plugins import Plugin
 
 
-class HelloPlugin(Plugin):
+class ExamplePlugin(Plugin):
     """
-    A simple Hello World plugin for AIxTerm.
+    A simple example plugin for AIxTerm.
     
     This plugin demonstrates the basic structure of an AIxTerm plugin.
     """
@@ -127,12 +127,12 @@ class HelloPlugin(Plugin):
     @property
     def id(self) -> str:
         """Get the plugin ID."""
-        return "hello"
+        return "example"
     
     @property
     def name(self) -> str:
         """Get the plugin name."""
-        return "Hello World"
+        return "Example Plugin"
     
     @property
     def version(self) -> str:
@@ -142,28 +142,28 @@ class HelloPlugin(Plugin):
     @property
     def description(self) -> str:
         """Get the plugin description."""
-        return "A simple Hello World plugin for AIxTerm"
+        return "A simple example plugin for AIxTerm"
     
     def initialize(self) -> bool:
         """Initialize the plugin."""
-        self.logger.info("Initializing Hello World plugin")
+        self.logger.info("Initializing example plugin")
         return super().initialize()
     
     def shutdown(self) -> bool:
         """Shutdown the plugin."""
-        self.logger.info("Shutting down Hello World plugin")
+        self.logger.info("Shutting down example plugin")
         return super().shutdown()
     
     def get_commands(self) -> Dict[str, Callable]:
         """Get the plugin commands."""
         return {
-            "hello": self.cmd_hello,
-            "hello_name": self.cmd_hello_name,
+            "greet": self.cmd_greet,
+            "greet_name": self.cmd_greet_name,
         }
     
-    def cmd_hello(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def cmd_greet(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Handle the 'hello' command.
+        Handle the 'greet' command.
         
         Args:
             data: Command data.
@@ -175,9 +175,9 @@ class HelloPlugin(Plugin):
             "message": "Hello, World!"
         }
     
-    def cmd_hello_name(self, data: Dict[str, Any]) -> Dict[str, Any]:
+    def cmd_greet_name(self, data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Handle the 'hello_name' command.
+        Handle the 'greet_name' command.
         
         Args:
             data: Command data. Should contain a 'name' field.

@@ -357,7 +357,8 @@ end
 
 # Check and offer to install integration if missing
 if test "(_aixterm_check_installation)" = "true"
-    # Only auto-install if we're in an interactive shell and not already running from config
+
+# Only auto-install if we're in an interactive shell and not already running from config
     if status is-interactive; and not set -q _AIXTERM_AUTO_INSTALLING
         echo "AIxTerm integration not found in shell configuration."
         echo "Would you like to install it automatically? [y/N]"
@@ -385,7 +386,8 @@ begin
     echo "# PID: "(echo %self)
     echo "# Full logging active (commands + timing automatically captured)"
     echo "# Use 'aixterm_toggle_minimal_logging' to switch to commands-only mode"
-    echo "# Use 'log_command <cmd>' for explicit command execution with guaranteed output"
+    echo "
+    # Use 'log_command <cmd>' for explicit command execution with guaranteed output"
     echo ""
 end >> (_aixterm_get_log_file) 2>/dev/null
 

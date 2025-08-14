@@ -412,9 +412,9 @@ class TerminalContext:
         # Token management stats
         try:
             stats["token_info"] = {
-                "context_tokens": self.config.get("context_tokens", "default"),
-                "token_budget": self.token_manager.get_token_budget(),
-                "smart_features": self.config.get("smart_context", True),
+                "context_tokens": str(self.config.get("context_tokens", "default")),
+                "token_budget": str(self.token_manager.get_token_budget()),
+                "smart_features": str(self.config.get("smart_context", True)),
             }
         except Exception as e:
             self.logger.error(f"Error getting token stats: {e}")
@@ -424,8 +424,10 @@ class TerminalContext:
         try:
             stats["directory_info"] = {
                 "current_dir": os.getcwd(),
-                "tty_isolation": True,
-                "workspace_detection": self.config.get("workspace_detection", True),
+                "tty_isolation": str(True),
+                "workspace_detection": str(
+                    self.config.get("workspace_detection", True)
+                ),
             }
         except Exception as e:
             self.logger.error(f"Error getting directory stats: {e}")

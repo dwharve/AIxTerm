@@ -6,7 +6,7 @@ This agent specializes in analyzing codebases and providing insights.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from . import Agent
 
@@ -117,13 +117,13 @@ class CodeAnalystAgent(Agent):
         Returns:
             Improvement suggestions.
         """
-        code = task.get("code", "")
-        context = task.get("context", {})
+        # code = task.get("code", "")
+        # context = task.get("context", {})
 
-        self.logger.debug(f"Suggesting improvements for code")
+        self.logger.debug("Suggesting improvements for code")
 
         # Build context if not provided
-        code_context = {"code": code, **context}
+        # code_context = {"code": code, **context}
 
         # In a real implementation, we would call the LLM service here
         # For now, we'll just return a mock response

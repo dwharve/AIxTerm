@@ -138,25 +138,29 @@ class AIxTermClient:
         try:
             # No actual connection needed for HTTP
             # Just check if the server is reachable
-            import requests
+            import urllib.error
+            import urllib.request
 
             url = f"http://{self.http_host}:{self.http_port}/status"
-            response = requests.get(url, timeout=5)
+            try:
+                with urllib.request.urlopen(url, timeout=5) as response:
+                    status_code = getattr(response, "status", 200)
+            except urllib.error.HTTPError as e:
+                status_code = e.code
+            except urllib.error.URLError:
+                status_code = 0
 
-            if response.status_code == 200:
+            if status_code == 200:
                 self.connected = True
                 logger.debug("Connected to AIxTerm service via HTTP")
                 return True
             else:
-                logger.error(
-                    f"Error connecting to AIxTerm service: HTTP {response.status_code}"
-                )
+                logger.error(f"Error connecting to AIxTerm service: HTTP {status_code}")
                 self.connected = False
                 return False
 
-        except ImportError:
-            logger.error("Required module 'requests' not found")
-            logger.error("Please install it: pip install requests")
+        except Exception as e:
+            logger.error(f"HTTP check failed: {e}")
             self.connected = False
             return False
 
@@ -339,34 +343,39 @@ class AIxTermClient:
             The response from the service.
         """
         try:
-            import requests
+            import urllib.error
+            import urllib.request
 
             url = f"http://{self.http_host}:{self.http_port}/api"
-            response = requests.post(url, json=request, timeout=30)
+            data = json.dumps(request).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=data,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
 
-            if response.status_code == 200:
-                json_response: Dict[str, Any] = response.json()
-                return json_response
-            else:
+            try:
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    resp_body = resp.read().decode("utf-8")
+                    json_response: Dict[str, Any] = json.loads(resp_body)
+                    return json_response
+            except urllib.error.HTTPError as e:
                 return {
                     "status": "error",
                     "error": {
-                        "code": f"http_{response.status_code}",
-                        "message": f"HTTP error: {response.status_code}",
+                        "code": f"http_{e.code}",
+                        "message": f"HTTP error: {e.code}",
                     },
                 }
-
-        except ImportError:
-            logger.error("Required module 'requests' not found")
-            logger.error("Please install it: pip install requests")
-
-            return {
-                "status": "error",
-                "error": {
-                    "code": "missing_dependency",
-                    "message": 'Required module "requests" not found',
-                },
-            }
+            except urllib.error.URLError as e:
+                return {
+                    "status": "error",
+                    "error": {
+                        "code": "connection_error",
+                        "message": f"Failed to connect: {e.reason}",
+                    },
+                }
 
         except Exception as e:
             logger.error(f"Error sending HTTP request to AIxTerm service: {e}")

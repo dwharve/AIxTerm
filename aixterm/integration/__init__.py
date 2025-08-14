@@ -47,5 +47,7 @@ def get_shell_integration_manager(shell_name: str) -> Optional[BaseIntegration]:
     # Try to match shell
     integration_class = _SHELL_INTEGRATIONS.get(shell_name)
     if integration_class:
-        # Shell integration classes don't accept logger parameter
+        # Integration classes use optional logger; construct without arguments
         return integration_class()
+
+    return None

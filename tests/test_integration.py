@@ -2,17 +2,13 @@
 
 import json
 import sys
-from io import StringIO
 from unittest.mock import Mock, patch
 
 import pytest
 
 from aixterm.main import AIxTerm
 from aixterm.main.app import AIxTermApp
-from aixterm.main.cli import main, parse_arguments, run_cli_mode
-from aixterm.main.shell_integration import ShellIntegrationManager
-from aixterm.main.status_manager import StatusManager
-from aixterm.main.tools_manager import ToolsManager
+from aixterm.main.cli import main
 
 
 class TestAIxTermIntegration:
@@ -911,7 +907,7 @@ class TestCommandLineEdgeCases:
                 MockApp.return_value = mock_app
 
                 # Mock run_cli_mode to avoid actual execution
-                with patch("aixterm.main.cli.run_cli_mode") as mock_run:
+                with patch("aixterm.main.cli.run_cli_mode"):
                     # Mock app.shutdown() call that should happen at end of main()
                     with patch.object(AIxTermApp, "shutdown"):
                         main()

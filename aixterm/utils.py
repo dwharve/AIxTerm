@@ -64,7 +64,7 @@ def get_current_shell() -> str:
         current_process = psutil.Process()
         parent = current_process.parent()
         if parent:
-            parent_name = parent.name()
+            parent_name = str(parent.name())
             if parent_name in ["bash", "zsh", "fish"]:
                 return parent_name
     except (ImportError, Exception):

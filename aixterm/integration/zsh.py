@@ -216,7 +216,7 @@ log_command() {
 
     # Execute command and capture output
     eval "$cmd" 2>&1 | tee "$temp_output"
-    local exit_code=${pipestatus[1]}
+    local exitcode = ${pipestatus[1]}
 
     # Log the output
     {
@@ -234,7 +234,7 @@ log_command() {
 
 # Enhanced post-command function to capture exit codes and output
 _aixterm_precmd() {
-    local exit_code=$?
+    local exitcode = $?
     local log_file=$(_aixterm_get_log_file)
 
     # Log exit code for the previous command
@@ -245,7 +245,9 @@ _aixterm_precmd() {
         local duration=""
         if [[ -n "$_AIXTERM_COMMAND_START_TIME" ]]; then
             local end_time=$(date '+%s.%N')
-            duration=$(echo "$end_time - $_AIXTERM_COMMAND_START_TIME" | bc 2>/dev/null || echo "")
+            duration = (
+    $(echo "$end_time - $_AIXTERM_COMMAND_START_TIME" | bc 2>/dev/null || echo "")
+)
             unset _AIXTERM_COMMAND_START_TIME
         fi
 
@@ -356,7 +358,8 @@ _aixterm_install_integration() {
 
 # Check and offer to install integration if missing
 if [[ "$(_aixterm_check_installation)" == "true" ]]; then
-    # Only auto-install if we're in an interactive shell and not already running from config
+
+# Only auto-install if we're in an interactive shell and not already running from config
     if [[ $- == *i* ]] && [[ -z "$_AIXTERM_AUTO_INSTALLING" ]]; then
         echo "AIxTerm integration not found in shell configuration."
         echo "Would you like to install it automatically? [y/N]"
@@ -393,7 +396,8 @@ export _AIXTERM_INTEGRATION_LOADED=1
     echo "# TTY: $(tty 2>/dev/null || echo 'unknown')"
     echo "# Full logging active (commands + timing automatically captured)"
     echo "# Use 'aixterm_toggle_minimal_logging' to switch to commands-only mode"
-    echo "# Use 'log_command <cmd>' for explicit command execution with guaranteed output"
+    echo "
+    # Use 'log_command <cmd>' for explicit command execution with guaranteed output"
     echo ""
 } >> "$(_aixterm_get_log_file)" 2>/dev/null
 """

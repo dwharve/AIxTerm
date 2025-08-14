@@ -1,6 +1,6 @@
 """Building summaries from command history."""
 
-from typing import Dict, List, Optional, Tuple
+from typing import List, Tuple
 
 
 def build_tiered_summary(

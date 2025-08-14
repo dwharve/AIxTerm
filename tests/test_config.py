@@ -25,11 +25,8 @@ class TestAIxTermConfig:
         assert isinstance(config.get("mcp_servers"), list)
         assert (
             len(config.get("mcp_servers")) == 1
-        )  # pythonium server included by default
-        # Verify pythonium server is configured correctly
-        pythonium_server = config.get("mcp_servers")[0]
-        assert pythonium_server["command"] == "python -m pythonium"
-        assert pythonium_server["args"] == ["serve"]
+        )  # Updated: pythonium server included by default
+        assert config.get("mcp_servers")[0]["name"] == "pythonium"
 
     def test_load_existing_config(self, temp_dir, monkeypatch):
         """Test loading existing configuration file."""

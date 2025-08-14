@@ -2,7 +2,6 @@
 
 import re
 import sys
-import threading
 from typing import Any, Optional
 
 from ..utils import get_logger

@@ -2,8 +2,6 @@
 Tests for the DevTeam plugin agent framework.
 """
 
-from unittest.mock import MagicMock, patch
-
 import pytest
 
 from aixterm.plugins.devteam.agents import Agent, AgentRegistry

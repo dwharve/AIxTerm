@@ -1,7 +1,6 @@
-"""Log parsing and command extraction."""
+"""Log parsing utilities for extracting commands and conversations."""
 
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 def extract_commands_from_log(
@@ -19,7 +18,7 @@ def extract_commands_from_log(
     commands = []
     errors = []
     current_command = None
-    current_output = []
+    current_output: list[str] = []
 
     for line in lines:
         clean_line = line.strip()
@@ -68,7 +67,7 @@ def extract_conversation_from_log(log_content: str) -> List[Dict[str, Any]]:
     lines = log_content.split("\n")
     messages = []
 
-    current_ai_response = []
+    current_ai_response: list[str] = []
     collecting_response = False
 
     for line in lines:

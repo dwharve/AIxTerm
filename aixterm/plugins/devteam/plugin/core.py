@@ -74,9 +74,9 @@ class DevTeamPlugin(Plugin):
         self.logger.info("Initializing DevTeam plugin...")
 
         # Task management (for backward compatibility with tests)
-        self._active_tasks = {}
-        self._task_queue = []
-        self._task_status = {}
+        self._active_tasks: Dict[str, Any] = {}
+        self._task_queue: List[str] = []
+        self._task_status: Dict[str, TaskStatus] = {}
 
         # Set up event bus
         self._event_bus = EventBus()
@@ -144,7 +144,7 @@ class DevTeamPlugin(Plugin):
             self._plugin_config.update(self.config)
 
         # Background tasks
-        self._background_tasks = set()
+        self._background_tasks: set[asyncio.Task[Any]] = set()
         self._shutdown_event = asyncio.Event()
 
         # Register commands
@@ -199,10 +199,10 @@ class DevTeamPlugin(Plugin):
         """Register plugin commands."""
         # Define commands mapping for the new command system
         self._commands = {
-            "devteam:submit": self._handle_request_for_tests,  # Backward compat
-            "devteam:list": self._handle_request_for_tests,  # Backward compat
-            "devteam:status": self._handle_request_for_tests,  # Backward compat
-            "devteam:cancel": self._handle_request_for_tests,  # Backward compat
+            "devteam:submit": self._handle_request_for_tests,  # For backward compatibility
+            "devteam:list": self._handle_request_for_tests,  # For backward compatibility
+            "devteam:status": self._handle_request_for_tests,  # For backward compatibility
+            "devteam:cancel": self._handle_request_for_tests,  # For backward compatibility
             "devteam:task:create": self._command_handler.handle_task_create,
             "devteam:task:list": self._command_handler.handle_task_list,
             "devteam:task:get": self._command_handler.handle_task_get,

@@ -5,7 +5,7 @@ This module contains enums and type definitions used throughout the DevTeam plug
 """
 
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict
 
 
 class TaskType(Enum):
@@ -34,6 +34,7 @@ class TaskPriority(Enum):
 class TaskStatus(Enum):
     """Task execution status."""
 
+    PENDING = "pending"
     SUBMITTED = "submitted"
     QUEUED = "queued"
     PLANNING = "planning"
@@ -57,12 +58,25 @@ class WorkflowType(Enum):
 class WorkflowStatus(Enum):
     """Workflow execution status."""
 
+    CREATED = "created"
     INITIALIZED = "initialized"
+    PENDING = "pending"
     RUNNING = "running"
+    IN_PROGRESS = "in_progress"
     PAUSED = "paused"
     COMPLETED = "completed"
     FAILED = "failed"
     CANCELLED = "cancelled"
+
+
+class WorkflowStepStatus(Enum):
+    """Status of a workflow step."""
+
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    SKIPPED = "skipped"
 
 
 class AgentRole(Enum):

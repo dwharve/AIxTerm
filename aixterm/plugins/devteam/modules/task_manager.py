@@ -5,13 +5,12 @@ This module provides task creation, tracking, and management.
 """
 
 import logging
-import time
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Set
 
 from .config import ConfigManager
-from .events import Event, EventBus, EventType, TaskEvent
+from .events import EventBus, EventType, TaskEvent
 from .types import TaskId, TaskPriority, TaskStatus, TaskType
 
 logger = logging.getLogger(__name__)

@@ -55,7 +55,15 @@ class AIxTermConfig:
             "api_key": "",
             "context_size": 4096,  # Total context window size available
             "response_buffer_size": 1024,  # Space reserved for LLM response
-            "mcp_servers": [],
+            "mcp_servers": [
+                {
+                    "name": "pythonium",
+                    "command": "python -m pythonium",
+                    "args": ["serve"],
+                    "env": {},
+                    "description": "Python code execution and analysis MCP server",
+                }
+            ],
             "cleanup": {
                 "enabled": True,
                 "max_log_age_days": 30,
@@ -363,6 +371,8 @@ class AIxTermConfig:
     def _load_config(self) -> Dict[str, Any]:
         """Load configuration from file or return defaults.
 
+        If config file doesn't exist, automatically create it with defaults.
+
         Returns:
             Configuration dictionary
         """
@@ -372,10 +382,24 @@ class AIxTermConfig:
                     config = json.load(f)
                 return self._validate_config(config)
             except (json.JSONDecodeError, IOError) as e:
-                print(f"Warning: Error loading config file: {e}. Using defaults.")
+                self.logger.warning(f"Error loading config file: {e}. Using defaults.")
                 return self._get_default_config()
         else:
-            return self._get_default_config()
+            # Config file doesn't exist, create it with defaults
+            config = self._get_default_config()
+            try:
+                # Ensure parent directory exists
+                self.config_path.parent.mkdir(parents=True, exist_ok=True)
+
+                with open(self.config_path, "w", encoding="utf-8") as f:
+                    json.dump(config, f, indent=2)
+                self.logger.info(
+                    f"Created default configuration file at {self.config_path}"
+                )
+            except IOError as e:
+                self.logger.warning(f"Could not create config file: {e}")
+
+            return config
 
     def save_config(self) -> None:
         """Save current configuration to file."""
@@ -386,7 +410,7 @@ class AIxTermConfig:
             with open(self.config_path, "w", encoding="utf-8") as f:
                 json.dump(self._config, f, indent=2)
         except IOError as e:
-            print(f"Error saving config file: {e}")
+            self.logger.error(f"Error saving config file: {e}")
 
     def save(self) -> bool:
         """Save current configuration to file.
@@ -602,7 +626,7 @@ class AIxTermConfig:
                 new_avg = clamped_time
                 self._timing_initialized = True
                 self.logger.debug(
-                    f"Initializing adaptive timing with first measurement: "
+                    "Initializing adaptive timing with first measurement: "
                     f"{new_avg:.2f}s"
                 )
             else:
@@ -670,3 +694,25 @@ class AIxTermConfig:
             Available context size in tokens
         """
         return self.get_total_context_size() - self.get_response_buffer_size()
+
+    def get_openai_key(self) -> str:
+        """Get OpenAI API key from config.
+
+        Returns:
+            API key or dummy key if not configured
+        """
+        api_key = str(self.get("api_key", ""))
+        if not api_key:
+            api_key = "dummy_key"
+        return api_key
+
+    def get_openai_base_url(self) -> Optional[str]:
+        """Get OpenAI base URL from config.
+
+        Returns:
+            Base URL for non-OpenAI endpoints or None for default OpenAI
+        """
+        api_url = str(self.get("api_url", ""))
+        if api_url and "openai.com" not in api_url.lower():
+            return api_url
+        return None

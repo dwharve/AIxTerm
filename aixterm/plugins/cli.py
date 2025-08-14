@@ -4,11 +4,8 @@ AIxTerm Plugin CLI Integration
 This module provides CLI commands for managing AIxTerm plugins.
 """
 
-import argparse
 import json
 import logging
-import sys
-from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

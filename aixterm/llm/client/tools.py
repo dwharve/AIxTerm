@@ -1,8 +1,6 @@
 """Tool-based chat completion handling for LLM client."""
 
-from typing import Any, Dict, List, Optional, Tuple
-
-from ..exceptions import LLMError
+from typing import Any, Dict, List
 
 
 class ToolCompletionHandler:
@@ -54,7 +52,6 @@ class ToolCompletionHandler:
         Returns:
             Complete response text including tool results
         """
-        conversation_messages = messages.copy()
         max_iterations = self.config.get(
             "tool_management.max_tool_iterations", 5
         )  # Get from config with fallback
@@ -71,7 +68,7 @@ class ToolCompletionHandler:
             # Use centralized context management for both messages and tools
             # This ensures protocol compliance and proper token management
             managed_payload = self.tool_optimizer.manage_context_with_tools(
-                conversation_messages, tools
+                messages, tools
             )
             if not managed_payload:
                 self.logger.error("Could not fit conversation within context limits")
@@ -113,7 +110,8 @@ class ToolCompletionHandler:
                         tools,
                         iteration,
                         max_context_size,
-                        clear_displays=False,  # Don't clear - already cleared by streaming
+                        clear_displays=False,
+                        # Don't clear - already cleared by streaming
                     )
                     continue
                 else:

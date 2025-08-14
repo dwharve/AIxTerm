@@ -1,6 +1,5 @@
 """Pytest configuration and fixtures."""
 
-import asyncio
 import shutil
 import tempfile
 from pathlib import Path

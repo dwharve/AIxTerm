@@ -1,3 +1,5 @@
+import asyncio
+
 """
 AIxTerm Plugin Manager
 
@@ -5,7 +7,6 @@ This module provides the plugin management system for AIxTerm, enabling
 the discovery, loading, and management of plugins.
 """
 
-import asyncio
 import importlib
 import importlib.metadata
 import importlib.util
@@ -13,12 +14,54 @@ import logging
 import os
 import pkgutil
 import sys
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, Dict, Iterable, Optional, Protocol, Type, TypeVar, cast
 
 # Type for plugin classes
 T = TypeVar("T")
 
 logger = logging.getLogger(__name__)
+
+
+class EntryPointLike(Protocol):
+    """Duck-typed entry point with minimal API used here."""
+
+    name: str
+
+    def load(self) -> Any:
+        pass
+
+
+def _iter_plugin_entry_points() -> Iterable[EntryPointLike]:
+    """Yield plugin entry points across Python versions and pkg_resources.
+
+    This normalizes the differences between importlib.metadata APIs across
+    Python versions without needing type ignores.
+    """
+    # Try importlib.metadata first
+    try:
+        eps = importlib.metadata.entry_points()
+        # Python 3.10+ provides .select; older versions may return a dict-like
+        if hasattr(eps, "select"):
+            group = eps.select(group="aixterm.plugins")
+            return [cast(EntryPointLike, ep) for ep in group]
+        else:
+            # Fallback for older API that returned a dict of groups
+            eps_map: Any = eps
+            group = eps_map.get("aixterm.plugins", [])
+            return [cast(EntryPointLike, ep) for ep in group]
+    except Exception:
+        pass
+
+    # Fallback to pkg_resources if available
+    try:
+        import pkg_resources  # type: ignore[import-not-found]
+
+        return [
+            cast(EntryPointLike, ep)
+            for ep in pkg_resources.iter_entry_points("aixterm.plugins")
+        ]
+    except Exception:
+        return []
 
 
 class PluginManager:
@@ -153,18 +196,8 @@ class PluginManager:
 
             plugin_base = base.Plugin
 
-            # Find entry points
-            entry_points = []
-            try:
-                # Python 3.8+ with importlib.metadata
-                entry_points = list(
-                    importlib.metadata.entry_points(group="aixterm.plugins")
-                )
-            except (AttributeError, ImportError):
-                # Fallback for older Python
-                import pkg_resources
-
-                entry_points = list(pkg_resources.iter_entry_points("aixterm.plugins"))
+            # Find entry points using normalized helper
+            entry_points: Iterable[EntryPointLike] = _iter_plugin_entry_points()
 
             # Load plugin classes from entry points
             for entry_point in entry_points:

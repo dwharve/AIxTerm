@@ -125,7 +125,8 @@ class ServiceServer:
             import platform
 
             if platform.system() != "Windows":
-                self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)  # type: ignore
+                self.socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                # type: ignore
                 self.socket.bind(socket_path)
             else:
                 # Use a TCP socket on Windows

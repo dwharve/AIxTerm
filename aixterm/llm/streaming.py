@@ -3,8 +3,6 @@
 import json
 from typing import Any, Dict, List, Optional, Tuple
 
-import requests
-
 
 class StreamingHandler:
     """Handles streaming responses from LLM APIs."""
@@ -46,9 +44,7 @@ class StreamingHandler:
 
             self._streaming_started = True
 
-    def handle_streaming_response(
-        self, response: requests.Response, silent: bool = False
-    ) -> str:
+    def handle_streaming_response(self, response: Any, silent: bool = False) -> str:
         """Handle streaming response from LLM.
 
         Args:
@@ -222,22 +218,36 @@ class StreamingHandler:
                 self.logger.debug(f"Could not create API progress indicator: {e}")
 
         try:
-            response = requests.post(
-                self.config.get("api_url", "http://localhost/v1/chat/completions"),
+            # Use urllib to avoid hard dependency on requests for typing
+            import json as _json
+            from urllib import request as _urllib_request
+
+            url = self.config.get("api_url", "http://localhost/v1/chat/completions")
+            req = _urllib_request.Request(
+                url,
+                data=_json.dumps(payload).encode("utf-8"),
                 headers=headers,
-                json=payload,
-                stream=True,
-                timeout=30,
-            )
-            response.raise_for_status()
-
-            # Don't complete API progress here - let the streaming content clear it
-            # when the first actual content arrives
-            return self.parse_streaming_response_with_tools(
-                response, silent, api_progress
+                method="POST",
             )
 
-        except requests.exceptions.RequestException as e:
+            with _urllib_request.urlopen(req, timeout=30) as resp:  # nosec B310
+                # Wrap the response to expose iter_lines-like behavior
+                class _RespWrapper:
+                    def __init__(self, raw):
+                        self.raw = raw
+
+                    def iter_lines(self):
+                        for line in self.raw:
+                            yield line
+
+                wrapped = _RespWrapper(resp)
+
+                # Don't complete API progress here - streaming will handle it
+                return self.parse_streaming_response_with_tools(
+                    wrapped, silent, api_progress
+                )
+
+        except Exception as e:
             # Complete API progress on error
             if api_progress:
                 try:
@@ -252,7 +262,7 @@ class StreamingHandler:
 
     def parse_streaming_response_with_tools(
         self,
-        response: requests.Response,
+        response: Any,
         silent: bool = False,
         api_progress: Any = None,
     ) -> Tuple[str, Optional[List[Dict[str, Any]]]]:

@@ -6,7 +6,7 @@ This agent specializes in writing and refactoring code.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from . import Agent
 
@@ -79,8 +79,17 @@ class DeveloperAgent(Agent):
         Returns:
             Implementation results.
         """
-        requirements = task.get("requirements", {})
-        code_context = task.get("code_context", {})
+        """
+        Implement a feature based on requirements.
+
+        Args:
+            task: Task data containing requirements and context.
+
+        Returns:
+            Implementation results.
+        """
+        # requirements = task.get("requirements", {})
+        # code_context = task.get("code_context", {})
 
         self.logger.debug(f"Implementing feature: {task.get('description', '')}")
 
@@ -114,7 +123,7 @@ class DeveloperAgent(Agent):
             Bug fix results.
         """
         bug_description = task.get("bug_description", "")
-        code_context = task.get("code_context", {})
+        # code_context = task.get("code_context", {})
 
         self.logger.debug(f"Fixing bug: {bug_description}")
 
@@ -147,7 +156,7 @@ class DeveloperAgent(Agent):
         Returns:
             Refactoring results.
         """
-        code = task.get("code", "")
+        # code = task.get("code", "")
         refactoring_goal = task.get("goal", "Improve code quality")
 
         self.logger.debug(f"Refactoring code: {refactoring_goal}")
@@ -183,7 +192,7 @@ class DeveloperAgent(Agent):
         Returns:
             Test writing results.
         """
-        code = task.get("code", "")
+        # code = task.get("code", "")
         test_framework = task.get("test_framework", "pytest")
 
         self.logger.debug(f"Writing tests using {test_framework}")

@@ -4,10 +4,22 @@ Tests for the AIxTerm plugin service integration.
 
 from unittest.mock import MagicMock
 
-import pytest
+from aixterm.plugins import Plugin, PluginServiceHandlers
 
-from aixterm.plugins import PluginServiceHandlers
-from aixterm.plugins.hello import HelloPlugin
+
+# Mock plugin class for testing
+class MockTestPlugin(Plugin):
+    @property
+    def id(self):
+        return "mock_test"
+
+    @property
+    def name(self):
+        return "Mock Test Plugin"
+
+    @property
+    def version(self):
+        return "0.1.0"
 
 
 class TestPluginServiceHandlers:
@@ -38,7 +50,9 @@ class TestPluginServiceHandlers:
     def test_handle_list_plugins(self):
         """Test handling plugin list requests."""
         # Mock the plugin manager's discover_plugins method
-        self.mock_plugin_manager.discover_plugins.return_value = {"hello": HelloPlugin}
+        self.mock_plugin_manager.discover_plugins.return_value = {
+            "mock_test": MockTestPlugin
+        }
 
         # Mock the plugins attribute
         self.mock_plugin_manager.plugins = {}
@@ -47,47 +61,47 @@ class TestPluginServiceHandlers:
         response = self.handlers.handle_list_plugins({})
         assert response["status"] == "success"
         assert len(response["plugins"]) == 1
-        assert response["plugins"][0]["id"] == "hello"
+        assert response["plugins"][0]["id"] == "mock_test"
         assert response["plugins"][0]["loaded"] is False
 
         # Test with loaded plugins
-        hello_plugin = MagicMock()
-        hello_plugin.name = "Hello World"
-        hello_plugin.version = "0.1.0"
-        hello_plugin.description = "Test plugin"
-        self.mock_plugin_manager.plugins = {"hello": hello_plugin}
+        mock_plugin = MagicMock()
+        mock_plugin.name = "Mock Test Plugin"
+        mock_plugin.version = "0.1.0"
+        mock_plugin.description = "Test plugin"
+        self.mock_plugin_manager.plugins = {"mock_test": mock_plugin}
 
         response = self.handlers.handle_list_plugins({})
         assert response["status"] == "success"
         assert len(response["plugins"]) == 1
-        assert response["plugins"][0]["id"] == "hello"
+        assert response["plugins"][0]["id"] == "mock_test"
         assert response["plugins"][0]["loaded"] is True
-        assert response["plugins"][0]["name"] == "Hello World"
+        assert response["plugins"][0]["name"] == "Mock Test Plugin"
         assert response["plugins"][0]["version"] == "0.1.0"
         assert response["plugins"][0]["description"] == "Test plugin"
 
     def test_handle_plugin_info(self):
         """Test handling plugin info requests."""
         # Mock the plugins attribute
-        hello_plugin = MagicMock()
-        hello_plugin.name = "Hello World"
-        hello_plugin.version = "0.1.0"
-        hello_plugin.description = "Test plugin"
-        hello_plugin.initialized = True
-        hello_plugin.get_commands.return_value = {"hello": lambda x: x}
+        mock_plugin = MagicMock()
+        mock_plugin.name = "Mock Test Plugin"
+        mock_plugin.version = "0.1.0"
+        mock_plugin.description = "Test plugin"
+        mock_plugin.initialized = True
+        mock_plugin.get_commands.return_value = {"test": lambda x: x}
 
-        self.mock_plugin_manager.plugins = {"hello": hello_plugin}
+        self.mock_plugin_manager.plugins = {"mock_test": mock_plugin}
 
         # Test with valid loaded plugin
-        response = self.handlers.handle_plugin_info({"plugin_id": "hello"})
+        response = self.handlers.handle_plugin_info({"plugin_id": "mock_test"})
         assert response["status"] == "success"
-        assert response["plugin"]["id"] == "hello"
-        assert response["plugin"]["name"] == "Hello World"
+        assert response["plugin"]["id"] == "mock_test"
+        assert response["plugin"]["name"] == "Mock Test Plugin"
         assert response["plugin"]["version"] == "0.1.0"
         assert response["plugin"]["description"] == "Test plugin"
         assert response["plugin"]["loaded"] is True
         assert response["plugin"]["initialized"] is True
-        assert "hello" in response["plugin"]["commands"]
+        assert "test" in response["plugin"]["commands"]
 
         # Test with missing plugin_id
         response = self.handlers.handle_plugin_info({})
@@ -104,7 +118,7 @@ class TestPluginServiceHandlers:
         """Test handling plugin status requests."""
         # Mock the get_status method
         self.mock_plugin_manager.get_status.return_value = {
-            "plugins": {"hello": {"name": "Hello World"}},
+            "plugins": {"mock_test": {"name": "Mock Test Plugin"}},
             "total": 1,
             "commands": 1,
         }
@@ -114,7 +128,7 @@ class TestPluginServiceHandlers:
         assert "plugin_status" in response
         assert response["plugin_status"]["total"] == 1
         assert response["plugin_status"]["commands"] == 1
-        assert "hello" in response["plugin_status"]["plugins"]
+        assert "mock_test" in response["plugin_status"]["plugins"]
 
     def test_handle_load_plugin(self):
         """Test handling plugin load requests."""
@@ -122,14 +136,14 @@ class TestPluginServiceHandlers:
         self.mock_plugin_manager.load_plugin.return_value = True
 
         # Test with valid plugin ID
-        response = self.handlers.handle_load_plugin({"plugin_id": "hello"})
+        response = self.handlers.handle_load_plugin({"plugin_id": "mock_test"})
         assert response["status"] == "success"
         assert response["loaded"] is True
-        self.mock_plugin_manager.load_plugin.assert_called_with("hello")
+        self.mock_plugin_manager.load_plugin.assert_called_with("mock_test")
 
         # Test with already loaded plugin
-        self.mock_plugin_manager.plugins = {"hello": MagicMock()}
-        response = self.handlers.handle_load_plugin({"plugin_id": "hello"})
+        self.mock_plugin_manager.plugins = {"mock_test": MagicMock()}
+        response = self.handlers.handle_load_plugin({"plugin_id": "mock_test"})
         assert response["status"] == "success"
         assert response["already_loaded"] is True
 
@@ -141,7 +155,7 @@ class TestPluginServiceHandlers:
         # Test with failed load
         self.mock_plugin_manager.plugins = {}
         self.mock_plugin_manager.load_plugin.return_value = False
-        response = self.handlers.handle_load_plugin({"plugin_id": "hello"})
+        response = self.handlers.handle_load_plugin({"plugin_id": "mock_test"})
         assert response["status"] == "error"
         assert "plugin_load_failed" in response["error"]["code"]
 
@@ -151,17 +165,17 @@ class TestPluginServiceHandlers:
         self.mock_plugin_manager.unload_plugin.return_value = True
 
         # Mock the plugins attribute
-        self.mock_plugin_manager.plugins = {"hello": MagicMock()}
+        self.mock_plugin_manager.plugins = {"mock_test": MagicMock()}
 
         # Test with valid plugin ID
-        response = self.handlers.handle_unload_plugin({"plugin_id": "hello"})
+        response = self.handlers.handle_unload_plugin({"plugin_id": "mock_test"})
         assert response["status"] == "success"
         assert response["unloaded"] is True
-        self.mock_plugin_manager.unload_plugin.assert_called_with("hello")
+        self.mock_plugin_manager.unload_plugin.assert_called_with("mock_test")
 
         # Test with already unloaded plugin
         self.mock_plugin_manager.plugins = {}
-        response = self.handlers.handle_unload_plugin({"plugin_id": "hello"})
+        response = self.handlers.handle_unload_plugin({"plugin_id": "mock_test"})
         assert response["status"] == "success"
         assert response["already_unloaded"] is True
 
@@ -171,9 +185,9 @@ class TestPluginServiceHandlers:
         assert "missing_plugin_id" in response["error"]["code"]
 
         # Test with failed unload
-        self.mock_plugin_manager.plugins = {"hello": MagicMock()}
+        self.mock_plugin_manager.plugins = {"mock_test": MagicMock()}
         self.mock_plugin_manager.unload_plugin.return_value = False
-        response = self.handlers.handle_unload_plugin({"plugin_id": "hello"})
+        response = self.handlers.handle_unload_plugin({"plugin_id": "mock_test"})
         assert response["status"] == "error"
         assert "plugin_unload_failed" in response["error"]["code"]
 
@@ -182,27 +196,27 @@ class TestPluginServiceHandlers:
         # Mock the handle_request method
         self.mock_plugin_manager.handle_request.return_value = {
             "status": "success",
-            "result": {"message": "Hello, World!"},
+            "result": {"message": "Test successful!"},
         }
 
         # Test with valid command
         response = self.handlers.handle_plugin_command(
-            {"plugin_id": "hello", "command": "hello", "data": {}}
+            {"plugin_id": "mock_test", "command": "test", "data": {}}
         )
         assert response["status"] == "success"
-        assert response["result"]["message"] == "Hello, World!"
+        assert response["result"]["message"] == "Test successful!"
         self.mock_plugin_manager.handle_request.assert_called_with(
-            "hello", {"command": "hello", "data": {}}
+            "mock_test", {"command": "test", "data": {}}
         )
 
         # Test with missing plugin ID
-        response = self.handlers.handle_plugin_command({"command": "hello", "data": {}})
+        response = self.handlers.handle_plugin_command({"command": "test", "data": {}})
         assert response["status"] == "error"
         assert "missing_plugin_id" in response["error"]["code"]
 
         # Test with missing command
         response = self.handlers.handle_plugin_command(
-            {"plugin_id": "hello", "data": {}}
+            {"plugin_id": "mock_test", "data": {}}
         )
         assert response["status"] == "error"
         assert "missing_command" in response["error"]["code"]

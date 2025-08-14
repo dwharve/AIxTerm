@@ -1,16 +1,17 @@
+import asyncio
+
 """
 Event system for the DevTeam plugin.
 
 This module provides an event bus for plugin components to communicate through events.
 """
 
-import asyncio
 import logging
 import uuid
 from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Set
 
-from .types import EventData, EventId, TaskId, WorkflowId
+from .types import EventId, TaskId, WorkflowId
 
 logger = logging.getLogger(__name__)
 
@@ -36,13 +37,19 @@ class EventType(Enum):
     WORKFLOW_STEP_STARTED = "workflow_step_started"
     WORKFLOW_STEP_COMPLETED = "workflow_step_completed"
 
-    # Agent events
+    # Agent events (both old and new naming for compatibility)
+    AGENT_ASSIGNED = "agent_assigned"  # Legacy
+    AGENT_STARTED_WORK = "agent_started_work"  # Legacy
+    AGENT_COMPLETED_WORK = "agent_completed_work"  # Legacy
+    AGENT_FAILED = "agent_failed"  # Legacy
     AGENT_TASK_ASSIGNED = "agent_task_assigned"
     AGENT_TASK_STARTED = "agent_task_started"
     AGENT_TASK_COMPLETED = "agent_task_completed"
     AGENT_TASK_FAILED = "agent_task_failed"
 
     # System events
+    SYSTEM_ERROR = "system_error"  # Legacy
+    SYSTEM_INFO = "system_info"  # Legacy
     PLUGIN_INITIALIZED = "plugin_initialized"
     PLUGIN_SHUTDOWN = "plugin_shutdown"
     CONFIG_UPDATED = "config_updated"
@@ -175,6 +182,56 @@ class WorkflowEvent(Event):
         super().__init__(event_type, data, event_id)
         self.workflow_id = workflow_id
         self.data["workflow_id"] = workflow_id
+
+
+class AgentEvent(Event):
+    """Event related to an agent (for backward compatibility)."""
+
+    def __init__(
+        self,
+        event_type: EventType,
+        agent_id: str,
+        data: Optional[Dict[str, Any]] = None,
+        event_id: Optional[EventId] = None,
+    ):
+        """
+        Initialize an agent event.
+
+        Args:
+            event_type: Type of the event
+            agent_id: ID of the agent
+            data: Event data (optional)
+            event_id: Unique event ID (auto-generated if not provided)
+        """
+        super().__init__(event_type, data, event_id)
+        self.agent_id = agent_id
+        self.data["agent_id"] = agent_id
+
+    @classmethod
+    def from_dict(cls, event_dict: Dict[str, Any]) -> "AgentEvent":
+        """
+        Create an agent event from a dictionary.
+
+        Args:
+            event_dict: Dictionary containing event data
+
+        Returns:
+            AgentEvent object.
+        """
+        event_type_value = event_dict.get("event_type")
+        event_type = EventType(event_type_value)
+        data = event_dict.get("data", {})
+        agent_id = data.get("agent_id")
+
+        if not agent_id:
+            raise ValueError("Agent event requires an agent_id")
+
+        return cls(
+            event_type=event_type,
+            agent_id=agent_id,
+            data=data,
+            event_id=event_dict.get("event_id"),
+        )
 
 
 # Type for event handlers

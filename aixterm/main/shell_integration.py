@@ -1,9 +1,5 @@
 """Shell integration functionality for AIxTerm."""
 
-import os
-import shutil
-import stat
-from pathlib import Path
 from typing import Any, Dict, Optional
 
 from aixterm.integration import get_shell_integration_manager

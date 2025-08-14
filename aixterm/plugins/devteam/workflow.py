@@ -8,33 +8,12 @@ Workflows define how tasks are processed by different agents in sequence.
 import asyncio
 import logging
 import uuid
-from enum import Enum
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from aixterm.plugins.devteam.events import EventBus, EventType, WorkflowEvent
+from .modules.events import EventBus, EventType, WorkflowEvent
+from .modules.types import WorkflowStatus, WorkflowStepStatus
 
 logger = logging.getLogger(__name__)
-
-
-class WorkflowStepStatus(Enum):
-    """Status of a workflow step."""
-
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-
-
-class WorkflowStatus(Enum):
-    """Status of a workflow."""
-
-    CREATED = "created"
-    RUNNING = "running"
-    PAUSED = "paused"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
 
 
 class WorkflowStep:
@@ -165,10 +144,10 @@ class Workflow:
 
         # Publish event
         if self.event_bus:
-            await self.event_bus.publish(
+            # EventBus.publish is synchronous and returns None
+            self.event_bus.publish(
                 WorkflowEvent(
                     event_type=EventType.WORKFLOW_CREATED,
-                    source="workflow_engine",
                     workflow_id=self.workflow_id,
                     data={"name": self.name},
                 )
@@ -482,7 +461,12 @@ class WorkflowTemplate:
             else:
                 return obj
 
-        return replace_params(result)
+        processed = replace_params(result)
+        # Ensure the result is a dict as declared
+        if isinstance(processed, dict):
+            return processed  # type: ignore[return-value]
+        # Fallback: wrap in dict for safety
+        return {"result": processed}
 
 
 def create_feature_workflow_template() -> WorkflowTemplate:
@@ -518,7 +502,8 @@ def create_feature_workflow_template() -> WorkflowTemplate:
                     "type": "analyze",
                     "code_context": {
                         "description": "Analyze where to implement {feature_name}",
-                        "files": {},  # Would be filled with actual files in a real workflow
+                        "files": {},
+                        # Would be filled with actual files in a real workflow
                     },
                     "analysis_request": "Identify the best place to implement {feature_name}",
                 },

@@ -1,6 +1,6 @@
 """LLM client module components."""
 
-import json
+import sys
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -116,17 +116,8 @@ class LLMClient(LLMClientBase):
         self.logger.info(f"Processing query: {query}")
         start_time = time.time()
 
-        # Get context for the query
-        context = "test context"  # Simplified for testing
-
-        # Prepare messages for the LLM
-        messages = [
-            {"role": "system", "content": self.config.get("system_prompt", "")},
-            {"role": "user", "content": f"{context}\n\nUser: {query}"},
-        ]
-
         # For testing, just return a basic response
-        response = {
+        response: Dict[str, Any] = {
             "content": "Response to: " + query,
             "thinking": "Thinking process..." if show_thinking else "",
             "tool_calls": [],
@@ -265,9 +256,8 @@ class LLMClient(LLMClientBase):
                             )  # Add space after "to"
                         else:
                             full_response += filtered_content
-                        # Use sys.stdout for streaming output to maintain real-time display
-                        import sys
 
+                        # Use sys.stdout for streaming output to maintain real-time display
                         print(filtered_content, end="", flush=True)
 
                 # Process tool calls (simplified for now)
@@ -277,13 +267,9 @@ class LLMClient(LLMClientBase):
                             tool_call.function, "name"
                         ):
                             # Use sys.stdout for tool call notifications
-                            import sys
-
                             print(f"\nCalling tool: {tool_call.function.name}")
 
             # Add a newline at the end for proper formatting
-            import sys
-
             print()
 
             # Complete filtering of thinking content
@@ -322,7 +308,7 @@ class LLMClient(LLMClientBase):
                 None,
             )
             if with_stack:
-                raise LLMError(f"Error communicating with LLM: Mock error")
+                raise LLMError("Error communicating with LLM: Mock error")
 
             # Handle the different test cases
             if len(messages) == 1:

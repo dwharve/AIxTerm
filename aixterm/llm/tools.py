@@ -3,25 +3,36 @@
 import json
 from typing import Any, Callable, Dict, List, Optional
 
+from ..display import DisplayManager
+
 
 class ToolHandler:
-    """Handles tool execution and processing for LLM requests."""
+    """Handles tool execution and integration with MCP client."""
 
-    def __init__(self, config_manager: Any, mcp_client: Any, logger: Any):
+    def __init__(
+        self,
+        config_manager=None,
+        mcp_client=None,
+        logger=None,
+        display_manager: Optional[DisplayManager] = None,
+    ):
         """Initialize tool handler.
 
         Args:
             config_manager: Configuration manager instance
-            mcp_client: MCP client instance for tool execution
+            mcp_client: MCP client instance
             logger: Logger instance
+            display_manager: Display manager instance
         """
+        self.config_manager = config_manager
+        # Many callers expect `config` attribute; provide alias for typing
         self.config = config_manager
         self.mcp_client = mcp_client
         self.logger = logger
-        self.display_manager = None
+        self.display_manager = display_manager
 
-    def set_progress_display_manager(self, display_manager: Any) -> None:
-        """Set the display manager for clearing displays during tool execution.
+    def set_progress_display_manager(self, display_manager: DisplayManager):
+        """Set the progress display manager.
 
         Args:
             display_manager: Display manager instance
@@ -150,7 +161,7 @@ class ToolHandler:
                 result_tokens = token_manager.estimate_tokens(result_content)
                 self.logger.debug(
                     f"Fresh tool result for {function_name}: {result_tokens} tokens, "
-                    f"preserving full content for AI analysis"
+                    "preserving full content for AI analysis"
                 )
 
                 self.logger.debug(

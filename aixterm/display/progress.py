@@ -233,6 +233,7 @@ class _ProgressDisplay:
 
             with self._tqdm_lock:
                 # Provide an empty iterable as the first argument to tqdm
+
                 # Ignore type errors since tqdm's type hints are complex and difficult to match exactly
                 self._tqdm = tqdm(iter([]), **tqdm_kwargs)  # type: ignore
 

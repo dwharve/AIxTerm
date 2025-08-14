@@ -1,8 +1,5 @@
 """Core LLM client base functionality."""
 
-import json
-import logging
-import re
 import time
 from typing import Any, Callable, Dict, List, Optional
 
@@ -10,7 +7,6 @@ from openai import OpenAI
 
 from ...context import TokenManager, ToolOptimizer
 from ...utils import get_logger
-from ..exceptions import LLMError
 from ..message_validator import MessageValidator
 from ..tools import ToolHandler
 
@@ -73,7 +69,7 @@ class LLMClientBase:
         self.message_validator = MessageValidator(self.config, self.logger)
 
         # Initialize timing tracking
-        self._response_start_time = None
+        self._response_start_time: Optional[float] = None
 
     def _clear_progress_displays(self, context: str = "", force: bool = False) -> bool:
         """Clear any progress displays in the UI.

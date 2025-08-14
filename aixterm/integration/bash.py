@@ -49,6 +49,7 @@ class Bash(BaseIntegration):
 # Only run if we're in an interactive shell
 [[ $- == *i* ]] || return
 
+
 # Skip auto-start initialization if already loaded, but always define functions in script sessions
 if [[ -n "$_AIXTERM_LOADED" ]] && [[ -z "$_AIXTERM_IN_SCRIPT" ]]; then
     return

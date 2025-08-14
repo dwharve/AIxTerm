@@ -2,10 +2,11 @@
 Test cases for the LLM client V2.
 """
 
-import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
+
+from aixterm.llm.client import LLMClient as LLMClientV2
 
 # Mock the dependencies before importing the module
 patch("aixterm.context.TokenManager").start()
@@ -13,8 +14,6 @@ patch("aixterm.context.ToolOptimizer").start()
 patch("aixterm.llm.message_validator.MessageValidator").start()
 patch("aixterm.llm.tools.ToolHandler").start()
 patch("aixterm.utils.get_logger", return_value=MagicMock()).start()
-
-from aixterm.llm.client import LLMClient as LLMClientV2
 
 
 @pytest.fixture

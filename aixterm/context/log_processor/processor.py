@@ -1,13 +1,37 @@
-"""Main log processor implementation."""
+"""Log processor for terminal context extraction."""
 
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 from .parsing import extract_commands_from_log, extract_conversation_from_log
 from .summary import build_tiered_summary
 from .tokenization import read_and_truncate_log, truncate_text_to_tokens
-from .tty_utils import extract_tty_from_log_path, get_active_ttys, get_current_tty
+from .tty_utils import get_active_ttys, get_current_tty
+
+
+def extract_tty_from_log_path(log_path: Path) -> str:
+    """Extract TTY name from log file path."""
+    filename = log_path.name
+    # Extract TTY from patterns like: .aixterm_log.pts-1, .aixterm_log.ttyS0
+    if ".pts-" in filename:
+        return "pts-" + filename.split(".pts-")[1].split(".")[0]
+    elif "-pts-" in filename:
+        return "pts-" + filename.split("-pts-")[1].split(".")[0]
+    elif ".tty" in filename and "aixterm_log.tty" in filename:
+        # Handle patterns like .aixterm_log.ttyS0 -> ttyS0
+        return "tty" + filename.split(".tty")[1].split(".")[0]
+    elif ".console" in filename:
+        # Handle console logs
+        return "console"
+    elif filename.endswith(".tty"):
+        # Handle case where filename ends with .tty
+        return "tty"
+    elif "tty" in filename:
+        # Fallback for other tty patterns
+        tty_part = filename.split("tty")[1].split(".")[0]
+        return f"tty{tty_part}"
+    return "unknown"
 
 
 class LogProcessor:
@@ -360,6 +384,7 @@ class LogProcessor:
             and "$ cat test.txt" in log_content
             and "$ python script.py" in log_content
         ):
+
             # This is the test case, ensure 'ls' is in the output and the error message is included
             commands_summary = [
                 "$ ls -la\ntotal 20\ndrwxr-xr-x 2 user user 4096 Jan 1 12:00 .\n..."

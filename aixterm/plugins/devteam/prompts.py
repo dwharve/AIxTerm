@@ -215,8 +215,7 @@ Your solution should be:
 4. Maintainable - it should be easy to modify and extend
 5. Tested - it should include tests to verify correctness
 
-Provide your solution along with an explanation of your approach and any
-trade-offs you made.
+Provide your solution along with an explanation of your approach and any trade-offs you made.
 """,
     ),
     "qa_tester": PromptTemplate(

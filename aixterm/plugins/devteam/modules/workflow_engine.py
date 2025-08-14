@@ -1,44 +1,23 @@
+import asyncio
+
 """
 Workflow engine for the DevTeam plugin.
 
 This module provides workflow creation, execution, and management.
 """
 
-import asyncio
-import json
 import logging
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any, Awaitable, Callable, Dict, List, Optional, Set, Union
+from typing import Any, Dict, List, Optional, Set
 
 from .config import ConfigManager
 from .events import Event, EventBus, EventType, WorkflowEvent
-from .task_manager import Task, TaskManager
-from .types import EventId, TaskId, TaskStatus, WorkflowId
+from .task_manager import TaskManager
+from .types import TaskId, TaskStatus, WorkflowId, WorkflowStatus, WorkflowStepStatus
 
 logger = logging.getLogger(__name__)
-
-
-class WorkflowStepStatus(Enum):
-    """Status of a workflow step."""
-
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    SKIPPED = "skipped"
-
-
-class WorkflowStatus(Enum):
-    """Status of a workflow."""
-
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-    PAUSED = "paused"
 
 
 class WorkflowStepType(Enum):
@@ -329,7 +308,7 @@ class TaskStep(WorkflowStep):
             return context
 
         # Wait for the task to complete
-        task_completed = asyncio.Future()
+        task_completed: asyncio.Future[TaskStatus] = asyncio.Future()
 
         def handle_task_event(event: Event) -> None:
             if event.event_type in [EventType.TASK_COMPLETED, EventType.TASK_FAILED]:
@@ -569,6 +548,7 @@ class Workflow:
         self.context: Dict[str, Any] = {}
 
         # Set the start step ID
+        self.start_step_id: Optional[str]
         if start_step_id:
             self.start_step_id = start_step_id
         elif steps:
@@ -612,7 +592,7 @@ class Workflow:
         """
         # Parse steps
         steps_dict = workflow_dict.get("steps", {})
-        steps = {}
+        steps: Dict[str, WorkflowStep] = {}
 
         for step_id, step_data in steps_dict.items():
             step_type = WorkflowStepType(step_data["step_type"])
@@ -632,7 +612,7 @@ class Workflow:
             steps=steps,
             workflow_id=workflow_dict["workflow_id"],
             metadata=workflow_dict.get("metadata", {}),
-            start_step_id=workflow_dict.get("start_step_id"),
+            start_step_id=workflow_dict.get("start_step_id") or None,
         )
 
         # Set additional attributes

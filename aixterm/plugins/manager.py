@@ -11,7 +11,7 @@ import logging
 import os
 import pkgutil
 import sys
-from typing import Any, Dict, List, Optional, Type, cast
+from typing import Any, Dict, List, Type
 
 from .base import Plugin
 
@@ -64,17 +64,6 @@ class PluginManager:
         user_plugins = self._discover_user_plugins()
         plugins.update(user_plugins)
 
-        # 4. Handle special case for tests
-        # Look for HelloPlugin for the "hello" plugin_id
-        if "hello" not in plugins:
-            try:
-                from aixterm.plugins.hello import HelloPlugin
-
-                plugins["hello"] = HelloPlugin
-                self.logger.debug("Added HelloPlugin for testing")
-            except ImportError:
-                self.logger.debug("HelloPlugin not found")
-
         return plugins
 
     def _discover_builtin_plugins(self) -> Dict[str, Type[Plugin]]:
@@ -107,6 +96,7 @@ class PluginManager:
                             try:
                                 plugin_id = item.id
                                 if isinstance(plugin_id, property):
+
                                     # Skip this class since we can't get the ID without instantiation
                                     continue
                                 # Ensure plugin_id is a string
@@ -151,6 +141,7 @@ class PluginManager:
                         try:
                             plugin_id = plugin_class.id
                             if isinstance(plugin_id, property):
+
                                 # Skip this class since we can't get the ID without instantiation
                                 continue
                             # Ensure plugin_id is a string
@@ -224,6 +215,7 @@ class PluginManager:
                                     try:
                                         plugin_id = attr_value.id
                                         if isinstance(plugin_id, property):
+
                                             # Skip this class since we can't get the ID without instantiation
                                             continue
                                         # Ensure plugin_id is a string
@@ -232,6 +224,7 @@ class PluginManager:
                                             f"Found user plugin: {plugin_id} in {item_path}"
                                         )
                                     except (NotImplementedError, AttributeError):
+
                                         # Skip plugins that don't have ID properly implemented
                                         continue
                         except Exception as e:
@@ -438,14 +431,19 @@ class PluginManager:
         Returns:
             A dictionary with status information for all plugins.
         """
-        status = {
+        status: Dict[str, Any] = {
             "plugins": {},
             "total": len(self.plugins),
             "commands": len(self.commands),
         }
 
         for plugin_id, plugin in self.plugins.items():
-            status["plugins"][plugin_id] = plugin.status()
+            plugin_status = plugin.status()
+            if not isinstance(plugin_status, dict):
+                plugin_status = {"status": str(plugin_status)}
+            plugins_dict = status["plugins"]
+            assert isinstance(plugins_dict, dict)
+            plugins_dict[plugin_id] = plugin_status
 
         return status
 

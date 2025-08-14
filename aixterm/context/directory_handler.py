@@ -219,7 +219,7 @@ class DirectoryHandler:
                             )
 
                     self.logger.warning(
-                        f"Total file content token limit reached "
+                        "Total file content token limit reached "
                         f"({max_total_tokens}), stopping at {len(file_contents)} files"
                     )
                     break

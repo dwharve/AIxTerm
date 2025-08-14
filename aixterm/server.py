@@ -10,6 +10,8 @@ from .llm import LLMClient
 from .mcp_client import MCPClient
 from .utils import get_logger
 
+logger = get_logger(__name__)
+
 
 class AIxTermServer:
     """AIxTerm server for handling HTTP requests."""
@@ -51,12 +53,12 @@ class AIxTermServer:
         self.server = HTTPServer((host, port), handler)
 
         try:
-            self.logger.info(f"AIxTerm server running on http://{host}:{port}")
-            self.logger.info("Endpoints:")
-            self.logger.info("  POST /query - Send AI queries")
-            self.logger.info("  GET /status - Get server status")
-            self.logger.info("  GET /tools - List available tools")
-            self.logger.info("Press Ctrl+C to stop")
+            logger.info(f"AIxTerm server running on http://{host}:{port}")
+            logger.info("Endpoints:")
+            logger.info("  POST /query - Send AI queries")
+            logger.info("  GET /status - Get server status")
+            logger.info("  GET /tools - List available tools")
+            logger.info("Press Ctrl+C to stop")
 
             self.server.serve_forever()
         except KeyboardInterrupt:

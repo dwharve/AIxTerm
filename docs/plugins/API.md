@@ -177,10 +177,11 @@ The dependency status information returned by `check_plugin_dependencies()` has 
 {
   "endpoint": "plugin.command",
   "data": {
-    "plugin_id": "hello",
-    "command": "hello_name",
+    "plugin_id": "devteam",
+    "command": "submit",
     "data": {
-      "name": "Alice"
+      "title": "Example Task",
+      "description": "Create a simple function"
     }
   }
 }
@@ -192,7 +193,8 @@ The dependency status information returned by `check_plugin_dependencies()` has 
 {
   "status": "success",
   "result": {
-    "message": "Hello, Alice!"
+    "task_id": "task-123",
+    "message": "Task submitted successfully"
   }
 }
 ```

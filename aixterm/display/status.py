@@ -1,6 +1,6 @@
 """Status message functionality for the display system."""
 
-from typing import Any, Optional
+from typing import Any
 
 from ..utils import get_logger
 from .types import MessageType

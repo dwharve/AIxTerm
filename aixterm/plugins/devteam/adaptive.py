@@ -5,12 +5,10 @@ This module provides adaptive learning capabilities for prompt optimization.
 It tracks performance of prompts and adapts them based on success metrics.
 """
 
-import asyncio
 import json
 import logging
-import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional
 
 from .prompts import PromptOptimizer, PromptTemplate
 
@@ -52,8 +50,8 @@ class PerformanceMetrics:
         self.feedback_scores: List[int] = []
 
         # Timestamps
-        self.first_used_at = None
-        self.last_used_at = None
+        self.first_used_at: Optional[str] = None
+        self.last_used_at: Optional[str] = None
 
     def record_usage(
         self,
@@ -485,7 +483,7 @@ class AdaptiveLearningSystem:
             parts = template_id.split("_var_")
             agent_types.add(parts[0])
 
-        report = {
+        report: Dict[str, Any] = {
             "agent_types": {},
             "active_experiments": list(self.active_experiments.keys()),
             "total_templates": len(self.metrics),
@@ -506,7 +504,12 @@ class AdaptiveLearningSystem:
             except ValueError:
                 pass
 
-            report["agent_types"][agent_type] = {
+            # Ensure proper typing for nested dict assignment
+            agent_types_dict = report.get("agent_types")
+            if not isinstance(agent_types_dict, dict):
+                agent_types_dict = {}
+                report["agent_types"] = agent_types_dict
+            agent_types_dict[agent_type] = {
                 "templates": agent_metrics,
                 "has_template": has_template,
                 "in_experiment": agent_type in self.active_experiments,
