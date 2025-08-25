@@ -180,7 +180,10 @@ class TestAIxTermIntegration:
 
                         # Should print status information
                         mock_print.assert_any_call("AIxTerm Status")
-                        mock_print.assert_any_call("\nCleanup Status:")
+                        # New condensed cleanup status line
+                        mock_print.assert_any_call(
+                            "Cleanup: last=Never next=unknown items=0 freed=0"
+                        )
 
     def test_cleanup_now_command(self, mock_config):
         """Test cleanup now command."""
@@ -554,6 +557,24 @@ class TestMainFunctionWithFiles:
                             "api_url", "http://example.com/api"
                         )
                         mock_app.config.set.assert_any_call("api_key", "test-key")
+
+    def test_main_with_restart_flag(self, mock_config):
+        """Test main function with --restart flag triggers control command."""
+        with patch.object(sys, "argv", ["aixterm", "--restart"]):
+            with patch("aixterm.main.cli.AIxTermApp") as MockApp:
+                mock_app = Mock()
+                MockApp.return_value = mock_app
+                with patch("aixterm.main.cli.StatusManager") as MockStatusManager:
+                    MockStatusManager.return_value = Mock()
+                    with patch("aixterm.main.cli.ToolsManager"):
+                        # Patch the actual client class import path used inside main()
+                        with patch("aixterm.client.client.AIxTermClient") as MockClient:
+                            mock_client = Mock()
+                            mock_client.control.return_value = {"status": "success", "result": {"message": "Service restarted"}}
+                            MockClient.return_value = mock_client
+                            with patch.object(AIxTermApp, "shutdown"):
+                                main()
+                            mock_client.control.assert_called_once_with("restart")
 
     def test_main_with_api_url_override_only(self, mock_config):
         """Test main function with only API URL override."""

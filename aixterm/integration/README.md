@@ -255,10 +255,10 @@ if fish.is_available():
 
 Each terminal session gets its own log file based on TTY:
 ```
-~/.aixterm_log.pts-0        # Terminal 1
-~/.aixterm_log.pts-1        # Terminal 2  
-~/.aixterm_log.console      # Console session
-~/.aixterm_log.default      # Fallback
+~/.aixterm/tty/pts-0.log        # Terminal 1
+~/.aixterm/tty/pts-1.log        # Terminal 2  
+~/.aixterm/tty/console.log      # Console session
+~/.aixterm/tty/default.log      # Fallback
 ```
 
 ### Log File Structure
@@ -450,13 +450,13 @@ if not bash.is_integration_installed(config_file):
 #### Log File Issues
 ```bash
 # Check log file permissions
-ls -la ~/.aixterm_log.*
+ls -la ~/.aixterm/tty/*.log
 
 # Manually create log file
-touch ~/.aixterm_log.$(tty | sed 's|/dev/||g' | sed 's|/|-|g')
+touch ~/.aixterm/tty/$(tty | sed 's|/dev/||g' | sed 's|/|-|g').log
 
 # Fix permissions
-chmod 644 ~/.aixterm_log.*
+chmod 644 ~/.aixterm/tty/*.log
 ```
 
 #### TTY Detection Problems
@@ -468,7 +468,7 @@ tty
 echo $SSH_TTY
 
 # Use default log file
-export _AIXTERM_LOG_FILE="$HOME/.aixterm_log.default"
+export _AIXTERM_LOG_FILE="$HOME/.aixterm/tty/default.log"
 ```
 
 ### Recovery Procedures
@@ -503,7 +503,7 @@ import glob
 from pathlib import Path
 
 # Remove log files
-for log_file in glob.glob(str(Path.home() / ".aixterm_log.*")):
+for log_file in glob.glob(str(Path.home() / ".aixterm/tty/*.log")):
     Path(log_file).unlink()
 
 # Remove backups (optional)
@@ -578,7 +578,7 @@ aixterm_flush_session
 aixterm_clear_log
 
 # Verify log file creation
-ls -la ~/.aixterm_log.*
+ls -la ~/.aixterm/tty/*.log
 ```
 
 ### Performance Testing
@@ -593,7 +593,7 @@ time bash -c 'exit'
 ps aux | grep bash
 
 # Check log file growth
-watch -n 1 'ls -lh ~/.aixterm_log.*'
+watch -n 1 'ls -lh ~/.aixterm/tty/*.log'
 ```
 
 ## Performance Considerations
@@ -705,7 +705,7 @@ def parse_aixterm_log(log_file: Path):
     return commands
 
 # Usage
-log_file = Path.home() / '.aixterm_log.pts-0'
+log_file = Path.home() / '.aixterm/tty/pts-0.log'
 if log_file.exists():
     commands = parse_aixterm_log(log_file)
     for cmd in commands[-5:]:  # Last 5 commands

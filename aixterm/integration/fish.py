@@ -48,7 +48,7 @@ class Fish(BaseIntegration):
 # Function to get current log file based on TTY
 function _aixterm_get_log_file
     set tty_name (tty 2>/dev/null | sed 's|/dev/||g' | sed 's|/|-|g')
-    echo "$HOME/.aixterm_log."(
+    echo "$HOME/.aixterm/tty/"(
         test -n "$tty_name"; and echo "$tty_name"; or echo "default"
     )
 end
@@ -106,11 +106,11 @@ function aixterm_cleanup_logs
     set active_ttys (who | awk '{print $2}' | sort -u)
 
     # Find all aixterm log files
-    for log_file in "$HOME"/.aixterm_log.*
+    for log_file in "$HOME"/.aixterm/tty/*.log
         test -f "$log_file"; or continue
 
-        # Extract TTY name from log file
-        set tty_name (basename "$log_file" | sed 's/^\.aixterm_log\.//')
+        # Extract TTY name from new-format log file (basename without .log)
+        set tty_name (basename "$log_file" .log)
 
         # Check if this TTY is currently active
         set is_active false
@@ -458,6 +458,17 @@ set -g _AIXTERM_INTEGRATION_LOADED 1
 
         return super().install(force, interactive)
 
+    # Override source snippet for fish syntax (fish does not use [ -f ... ])
+    def _get_source_snippet(self, rc_file: Path) -> str:  # type: ignore[override]
+        return (
+            f"\n{self.integration_marker}\n"
+            f"# Source AIxTerm fish integration rc file\n"
+            f"set -l AIXTERM_RC $HOME/.aixterm/{rc_file.name}\n"
+            f"if test -f $AIXTERM_RC\n"
+            f"    source $AIXTERM_RC\n"
+            f"end\n"
+        )
+
     def get_installation_notes(self) -> List[str]:
         """Return fish-specific installation notes."""
         return [
@@ -476,7 +487,7 @@ set -g _AIXTERM_INTEGRATION_LOADED 1
             "If logging isn't working, check fish event system with "
             + "'functions --handlers'",
             "Ensure ~/.config/fish directory exists and is writable",
-            "Check file permissions on ~/.aixterm_log.* files",
+            "Check file permissions on ~/.aixterm/tty/*.log files",
             "Fish events require fish version 2.3.0 or later",
             "Use 'fish --version' to verify fish version compatibility",
             "Use 'log_command <cmd>' for commands that need guaranteed output capture",

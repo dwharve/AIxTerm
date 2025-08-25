@@ -7,7 +7,7 @@ The service module provides system-level services and utilities for AIxTerm, inc
 
 ### Service Infrastructure
 - **AIxTerm Service**: Main service implementation and lifecycle management
-- **Service Server**: HTTP/WebSocket server for client communication
+- **Socket Server**: Unix domain socket IPC for client communication
 - **Context Manager**: Service-mode context handling and optimization
 - **Plugin Manager**: Plugin coordination and management in service mode
 
@@ -29,7 +29,7 @@ service/
 │   └── macos.py         # macOS launchd service installation
 ├── context.py           # Context management for service mode
 ├── plugin_manager.py    # Plugin management and coordination
-├── server.py            # HTTP/WebSocket service server
+├── server.py            # Socket service server (unified mode)
 └── service.py           # Main AIxTerm service implementation
 ```
 
@@ -42,9 +42,8 @@ service/
 - **Health Monitoring**: Service health checks and status reporting
 
 ### Communication Layer
-- **HTTP Server**: RESTful API for client communication
-- **WebSocket Support**: Real-time bidirectional communication
-- **Request Routing**: Intelligent routing of client requests
+- **Unix Domain Socket**: Local, low-latency IPC (AF_UNIX) (TCP fallback on Windows)
+- **Request Routing**: Lightweight message-based routing
 - **Response Streaming**: Efficient streaming of AI responses
 
 ### Maintenance Operations

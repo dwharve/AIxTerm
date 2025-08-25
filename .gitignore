@@ -8,3 +8,6 @@ htmlcov/
 dist/
 build/
 security-report.json
+.vscode/
+.env
+.venv/

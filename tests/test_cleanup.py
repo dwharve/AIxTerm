@@ -9,6 +9,10 @@ from unittest.mock import Mock, patch
 class TestCleanupManager:
     """Test cases for CleanupManager class."""
 
+    # NOTE: Ensure no fixture-dependent code at class scope; all log_dir usages belong inside tests.
+
+    # (Verified: no log_dir declarations at class scope. Previous stray lines removed.)
+
     def test_should_run_cleanup_disabled(self, cleanup_manager):
         """Test cleanup check when cleanup is disabled."""
         cleanup_manager.config.set("cleanup.enabled", False)
@@ -50,8 +54,10 @@ class TestCleanupManager:
     def test_run_cleanup_force(self, cleanup_manager, mock_home_dir):
         """Test forced cleanup execution."""
         # Create some test log files
-        old_log = mock_home_dir / ".aixterm_log.old"
-        new_log = mock_home_dir / ".aixterm_log.new"
+        log_dir = mock_home_dir / ".aixterm" / "tty"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        old_log = log_dir / "old.log"
+        new_log = log_dir / "new.log"
 
         old_log.write_text("old log content")
         new_log.write_text("new log content")
@@ -83,8 +89,10 @@ class TestCleanupManager:
         cleanup_manager.config.set("cleanup.max_log_age_days", 30)
 
         # Create old and new log files
-        old_log = mock_home_dir / ".aixterm_log.old"
-        new_log = mock_home_dir / ".aixterm_log.new"
+        log_dir = mock_home_dir / ".aixterm" / "tty"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        old_log = log_dir / "old.log"
+        new_log = log_dir / "new.log"
 
         old_log.write_text("old content")
         new_log.write_text("new content")
@@ -117,7 +125,8 @@ class TestCleanupManager:
         # Create multiple log files
         log_files = []
         for i in range(5):
-            log_file = mock_home_dir / f".aixterm_log.test{i}"
+            log_file = mock_home_dir / ".aixterm" / "tty" / f"test{i}.log"
+            log_file.parent.mkdir(parents=True, exist_ok=True)
             log_file.write_text(f"content {i}")
             log_files.append(log_file)
             time.sleep(0.01)  # Ensure different modification times
@@ -134,7 +143,9 @@ class TestCleanupManager:
 
     def test_truncate_large_log_file(self, cleanup_manager, mock_home_dir):
         """Test truncating large log files."""
-        large_log = mock_home_dir / ".aixterm_log.large"
+        log_dir = mock_home_dir / ".aixterm" / "tty"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        large_log = log_dir / "large.log"
 
         # Create a large log file (simulate > 10MB)
         large_content = "line\n" * 2000  # Many lines
@@ -174,8 +185,10 @@ class TestCleanupManager:
     def test_get_cleanup_status(self, cleanup_manager, mock_home_dir):
         """Test getting cleanup status information."""
         # Create some log files
-        log1 = mock_home_dir / ".aixterm_log.test1"
-        log2 = mock_home_dir / ".aixterm_log.test2"
+        log_dir = mock_home_dir / ".aixterm" / "tty"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log1 = log_dir / "test1.log"
+        log2 = log_dir / "test2.log"
         log1.write_text("content1")
         log2.write_text("content2")
 
@@ -257,8 +270,10 @@ class TestCleanupManager:
     def test_get_log_files(self, cleanup_manager, mock_home_dir):
         """Test getting list of log files."""
         # Create log files and other files
-        log1 = mock_home_dir / ".aixterm_log.test1"
-        log2 = mock_home_dir / ".aixterm_log.test2"
+        log_dir = mock_home_dir / ".aixterm" / "tty"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log1 = log_dir / "test1.log"
+        log2 = log_dir / "test2.log"
         other_file = mock_home_dir / ".other_file"
 
         log1.write_text("log1")
@@ -275,7 +290,9 @@ class TestCleanupManager:
     def test_file_error_handling_in_cleanup(self, cleanup_manager, mock_home_dir):
         """Test handling of file operation errors during cleanup."""
         # Create a log file
-        log_file = mock_home_dir / ".aixterm_log.test"
+        log_dir = mock_home_dir / ".aixterm" / "tty"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log_file = log_dir / "test.log"
         log_file.write_text("content")
 
         # Mock file removal to fail

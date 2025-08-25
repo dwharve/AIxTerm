@@ -89,16 +89,9 @@ def get_active_ttys() -> List[str]:
 
 
 def extract_tty_from_log_path(log_path: Path) -> Optional[str]:
-    """Extract TTY name from log file path.
-
-    Args:
-        log_path: Path to log file
-
-    Returns:
-        TTY name or None if not a TTY-based log
-    """
-    filename = log_path.name
-    if filename.startswith(".aixterm_log."):
-        tty_name = filename[13:]  # Remove ".aixterm_log." prefix
-        return tty_name
-    return None
+    """Extract TTY name from new-format log file path (~/.aixterm/tty/{tty}.log)."""
+    name = log_path.name
+    if not name.endswith(".log"):
+        return None
+    stem = name[:-4]
+    return stem

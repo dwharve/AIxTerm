@@ -47,7 +47,11 @@ def devteam_plugin(mock_service):
     # Create the plugin with our mock service
     plugin = DevTeamPlugin(mock_service)
     plugin.initialize()
-    return plugin
+    yield plugin
+    try:
+        plugin.shutdown()
+    except Exception:
+        pass
 
 
 def test_devteam_submit_complex_task(devteam_plugin):

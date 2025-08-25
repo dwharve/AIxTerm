@@ -1,0 +1,47 @@
+{
+  "model": "local-model",
+  "system_prompt": "You are a terminal-based AI assistant. Respond to user input with short, concise answers. Do not repeat the user's instructions or restate the context unless specifically asked or contextually necessary. Prioritize tool use for efficiency. When information is required that may be inaccurate or unknown, search the web rather than guessing. Use available tools when they are appropriate to the user's request. Only include relevant output in your responses. If web sources are used, cite them properly.Citations should be located at the end of the response and in the format:\n1. <title>\n<url>\n<snippet>\n\n2. ...",
+  "planning_system_prompt": "You are a strategic planning AI assistant. When given a task or problem, break it down into clear, actionable steps. Create detailed plans that consider dependencies, potential issues, and alternative approaches. Use tool calls to execute commands and perform actions. Always think through the complete workflow before starting and explain your reasoning. Provide step-by-step guidance and check for understanding before proceeding.",
+  "api_url": "http://localhost/v1/chat/completions",
+  "api_key": "",
+  "context_size": 4096,
+  "response_buffer_size": 1024,
+  "mcp_servers": [
+    {
+      "name": "pythonium",
+      "command": "python -m pythonium",
+      "args": [
+        "serve"
+      ],
+      "env": {},
+      "description": "Python code execution and analysis MCP server"
+    }
+  ],
+  "cleanup": {
+    "enabled": true,
+    "max_log_age_days": 30,
+    "max_log_files": 10,
+    "cleanup_interval_hours": 24
+  },
+  "tool_management": {
+    "reserve_tokens_for_tools": 1024,
+    "max_tool_iterations": 5,
+    "response_timing": {
+      "average_response_time": 10.0,
+      "max_progress_time": 30.0,
+      "progress_update_interval": 0.5
+    },
+    "tool_priorities": {
+      "execute_command": 1000,
+      "search_tools": 950,
+      "describe_tool": 900,
+      "read_file": 850,
+      "write_file": 840,
+      "find_files": 820,
+      "search_files": 810,
+      "delete_file": 800,
+      "web_search": 650,
+      "http_client": 600
+    }
+  }
+}

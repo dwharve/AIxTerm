@@ -33,8 +33,9 @@ class TestTerminalContext:
             assert "No recent terminal history available" in context
 
     def test_find_log_file_with_tty(self, context_manager, mock_home_dir):
-        """Test finding log file using TTY information."""
-        expected_log = mock_home_dir / ".aixterm_log.pts-0"
+        """Test finding log file using TTY information (new layout)."""
+        expected_log = mock_home_dir / ".aixterm" / "tty" / "pts-0.log"
+        expected_log.parent.mkdir(parents=True, exist_ok=True)
         expected_log.write_text("test log content")
 
         # Test TTY functionality on Unix systems, or mock it on Windows
@@ -72,10 +73,12 @@ class TestTerminalContext:
                 delattr(os, "ttyname")
 
     def test_find_log_file_fallback(self, context_manager, mock_home_dir):
-        """Test finding log file using fallback (most recent)."""
+        """Test finding log file using fallback (most recent) in new layout."""
         # Create multiple log files with different timestamps
-        old_log = mock_home_dir / ".aixterm_log.old"
-        new_log = mock_home_dir / ".aixterm_log.new"
+        log_dir = mock_home_dir / ".aixterm" / "tty"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        old_log = log_dir / "old.log"
+        new_log = log_dir / "new.log"
 
         old_log.write_text("old content")
         new_log.write_text("new content")
@@ -129,8 +132,9 @@ class TestTerminalContext:
             assert isinstance(result, str)
 
     def test_read_and_truncate_log_large_file(self, context_manager, mock_home_dir):
-        """Test handling large log files with automatic truncation."""
-        large_log = mock_home_dir / ".aixterm_log.large"
+        """Test handling large log files with automatic truncation (new layout)."""
+        large_log = mock_home_dir / ".aixterm" / "tty" / "large.log"
+        large_log.parent.mkdir(parents=True, exist_ok=True)
 
         # Create a log with more than 300 lines (our new limit)
         lines = [f"$ command {i}\noutput {i}\n" for i in range(500)]
@@ -149,10 +153,12 @@ class TestTerminalContext:
         assert len(remaining_lines) < original_line_count
 
     def test_get_log_files(self, context_manager, mock_home_dir):
-        """Test getting list of all log files."""
+        """Test getting list of all log files (new layout)."""
         # Create some log files
-        log1 = mock_home_dir / ".aixterm_log.pts-1"
-        log2 = mock_home_dir / ".aixterm_log.pts-2"
+        log_dir = mock_home_dir / ".aixterm" / "tty"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log1 = log_dir / "pts-1.log"
+        log2 = log_dir / "pts-2.log"
         other_file = mock_home_dir / ".other_file"
 
         log1.write_text("log1")
@@ -178,7 +184,8 @@ class TestTerminalContext:
         with patch.object(
             context_manager.log_processor, "_get_current_log_file"
         ) as mock_get_log:
-            log_file = mock_home_dir / ".aixterm_log.test"
+            log_file = mock_home_dir / ".aixterm" / "tty" / "test.log"
+            log_file.parent.mkdir(parents=True, exist_ok=True)
             mock_get_log.return_value = log_file
 
             context_manager.log_processor.create_log_entry(
@@ -199,7 +206,7 @@ class TestTerminalContext:
                 patch.object(sys.stdin, "fileno", return_value=0),
             ):
                 log_path = context_manager.log_processor._get_current_log_file()
-                assert log_path == mock_home_dir / ".aixterm_log.pts-1"
+                assert log_path == mock_home_dir / ".aixterm" / "tty" / "pts-1.log"
         else:
             # On Windows, add the ttyname function temporarily and mock stdin.fileno
             def mock_ttyname(_):
@@ -210,7 +217,7 @@ class TestTerminalContext:
             try:
                 with patch.object(sys.stdin, "fileno", return_value=0):
                     log_path = context_manager.log_processor._get_current_log_file()
-                    assert log_path == mock_home_dir / ".aixterm_log.pts-1"
+                    assert log_path == mock_home_dir / ".aixterm" / "tty" / "pts-1.log"
             finally:
                 # Clean up
                 delattr(os, "ttyname")
@@ -222,11 +229,11 @@ class TestTerminalContext:
             # On Unix systems, test OSError fallback
             with patch("os.ttyname", side_effect=OSError("No TTY")):
                 log_path = context_manager.log_processor._get_current_log_file()
-                assert log_path == mock_home_dir / ".aixterm_log.default"
+                assert log_path == mock_home_dir / ".aixterm" / "tty" / "default.log"
         else:
             # On Windows, ttyname doesn't exist so fallback is used automatically
             log_path = context_manager.log_processor._get_current_log_file()
-            expected = mock_home_dir / ".aixterm_log.default"
+            expected = mock_home_dir / ".aixterm" / "tty" / "default.log"
             assert log_path == expected
 
     def test_error_handling_in_context_retrieval(self, context_manager):
@@ -243,18 +250,21 @@ class TestTerminalContext:
 
     def test_file_encoding_handling(self, context_manager, mock_home_dir):
         """Test handling of files with encoding issues."""
-        log_file = mock_home_dir / ".aixterm_log.encoding"
-
+        # Setup
+        log_file = mock_home_dir / ".aixterm" / "tty" / "encoding.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
         # Write some binary data that might cause encoding issues
         with open(log_file, "wb") as f:
             f.write(b"Valid text\n\xff\xfe\nMore valid text\n")
 
-        # Should handle encoding errors gracefully
+        # Exercise
         result = context_manager.log_processor._read_and_truncate_log(
             log_file, 100, "test-model"
         )
+
+        # Verify
         assert isinstance(result, str)
-        assert "Valid text" in result or "More valid text" in result
+        assert ("Valid text" in result) or ("More valid text" in result)
 
 
 class TestFileContexts:
@@ -407,34 +417,30 @@ class TestAdvancedTerminalContext:
     def test_get_terminal_context_with_smart_features(self, context_manager, tmp_path):
         """Test terminal context with smart features enabled."""
         # Create a mock log file
-        log_file = tmp_path / ".aixterm_log.default"
+        log_file = tmp_path / ".aixterm" / "tty" / "default.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
         log_file.write_text("$ echo hello\nhello\n$ ls\nfile1.txt\nfile2.txt")
-
-        with patch.object(
-            context_manager.log_processor, "find_log_file", return_value=log_file
-        ):
+        with patch.object(context_manager.log_processor, "find_log_file", return_value=log_file):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_terminal_context(smart_summarize=True)
-
-                assert str(tmp_path) in result
-                assert "Recent commands:" in result or "echo hello" in result
+        
+        assert str(tmp_path) in result
+        assert "Recent commands:" in result or "echo hello" in result
 
     def test_get_terminal_context_without_smart_features(
         self, context_manager, tmp_path
     ):
         """Test terminal context with smart features disabled."""
-        log_file = tmp_path / ".aixterm_log.default"
+        log_file = tmp_path / ".aixterm" / "tty" / "default.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
         log_file.write_text("$ echo hello\nhello")
-
-        with patch.object(
-            context_manager.log_processor, "find_log_file", return_value=log_file
-        ):
+        with patch.object(context_manager.log_processor, "find_log_file", return_value=log_file):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_terminal_context(smart_summarize=False)
 
-                assert str(tmp_path) in result
-                # Should use the old truncation method
-                assert "echo hello" in result
+        assert str(tmp_path) in result
+        # Should use the old truncation method
+        assert "echo hello" in result
 
 
 class TestOptimizedContext:
@@ -443,38 +449,31 @@ class TestOptimizedContext:
     def test_get_optimized_context_basic(self, context_manager, tmp_path):
         """Test basic optimized context functionality."""
         # Create a mock log file
-        log_file = tmp_path / ".aixterm_log.default"
+        log_file = tmp_path / ".aixterm" / "tty" / "default.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
         log_file.write_text("$ echo hello\nhello\n$ ls\nfile1.txt\nfile2.txt")
-
-        with patch.object(
-            context_manager.log_processor, "find_log_file", return_value=log_file
-        ):
+        with patch.object(context_manager.log_processor, "find_log_file", return_value=log_file):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_optimized_context(query="test query")
 
-                assert str(tmp_path) in result
-                assert "echo hello" in result or "Recent terminal output" in result
+        assert str(tmp_path) in result
+        assert "echo hello" in result or "Recent terminal output" in result
 
     def test_get_optimized_context_with_files(self, context_manager, tmp_path):
         """Test optimized context with file contexts."""
         # Create test files
         test_file = tmp_path / "test.py"
         test_file.write_text("print('hello world')")
-
-        log_file = tmp_path / ".aixterm_log.default"
+        log_file = tmp_path / ".aixterm" / "tty" / "default.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
         log_file.write_text("$ python test.py\nhello world")
-
-        with patch.object(
-            context_manager.log_processor, "find_log_file", return_value=log_file
-        ):
+        with patch.object(context_manager.log_processor, "find_log_file", return_value=log_file):
             with patch("os.getcwd", return_value=str(tmp_path)):
-                result = context_manager.get_optimized_context(
-                    [str(test_file)], "analyze this code"
-                )
+                result = context_manager.get_optimized_context([str(test_file)], "analyze this code")
 
-                assert "File Context" in result
-                assert "print('hello world')" in result
-                assert str(tmp_path) in result
+        assert "File Context" in result
+        assert "print('hello world')" in result
+        assert str(tmp_path) in result
 
     def test_estimate_tokens(self, context_manager):
         """Test token estimation functionality."""
@@ -496,18 +495,14 @@ class TestOptimizedContext:
         """Test that optimized context respects token budgets."""
         # Create a large log file
         large_content = "$ command\noutput\n" * 1000
-        log_file = tmp_path / ".aixterm_log.default"
+        log_file = tmp_path / ".aixterm" / "tty" / "default.log"
+        log_file.parent.mkdir(parents=True, exist_ok=True)
         log_file.write_text(large_content)
-
-        with patch.object(
-            context_manager.log_processor, "find_log_file", return_value=log_file
-        ):
+        with patch.object(context_manager.log_processor, "find_log_file", return_value=log_file):
             with patch("os.getcwd", return_value=str(tmp_path)):
-                result = context_manager.get_optimized_context(
-                    query="test with large content"
-                )
+                result = context_manager.get_optimized_context(query="test with large content")
 
-                # Should not exceed reasonable limits
-                assert len(result) < 50000  # Reasonable upper bound
-                # Should still have directory info (may be truncated to basename)
-                assert tmp_path.name in result or str(tmp_path) in result
+        # Should not exceed reasonable limits
+        assert len(result) < 50000  # Reasonable upper bound
+        # Should still have directory info (may be truncated to basename)
+        assert tmp_path.name in result or str(tmp_path) in result

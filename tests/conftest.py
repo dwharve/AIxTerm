@@ -13,25 +13,42 @@ from aixterm.context import TerminalContext
 from aixterm.llm import LLMClient
 from aixterm.mcp_client import MCPClient
 
+# Track mock coroutines to ensure they're properly closed to avoid RuntimeWarnings
+_pending_mock_coroutines = set()
+
 
 def mock_coro(return_value=None):
-    """
-    Create a mock coroutine function that returns the specified value.
+    """Return an async function that records created coroutine objects for cleanup."""
 
-    This helper function can be used to mock async functions without causing
-    "coroutine was never awaited" warnings during tests.
-
-    Args:
-        return_value: The value to be returned when the coroutine is awaited.
-
-    Returns:
-        A coroutine function that returns the specified value.
-    """
-
-    async def mock_async_function(*args, **kwargs):
+    async def _impl(*args, **kwargs):  # actual coroutine implementation
         return return_value
 
-    return mock_async_function
+    def wrapper(*args, **kwargs):
+        coro = _impl(*args, **kwargs)
+        _pending_mock_coroutines.add(coro)
+        return coro
+
+    # Preserve async function semantics (attribute used only for introspection)
+    wrapper.__name__ = _impl.__name__
+    return wrapper
+
+
+@pytest.fixture(autouse=True, scope="session")
+def close_pending_mock_coroutines():
+    """Session-level cleanup to close any un-awaited mock coroutines before GC.
+
+    This suppresses spurious RuntimeWarnings that can appear late in the test run
+    when a patched async method produced a coroutine that was intentionally not
+    scheduled (e.g., due to a patched run_coroutine_threadsafe).
+    """
+    yield
+    to_close = list(_pending_mock_coroutines)
+    _pending_mock_coroutines.clear()
+    for coro in to_close:
+        try:  # Close regardless of state; safe for already-finished coroutines
+            coro.close()
+        except Exception:
+            pass
 
 
 @pytest.fixture
@@ -77,7 +94,9 @@ def mock_home_dir(temp_dir, monkeypatch):
 @pytest.fixture
 def sample_log_file(mock_home_dir):
     """Create a sample log file for testing."""
-    log_path = mock_home_dir / ".aixterm_log.test"
+    log_dir = mock_home_dir / ".aixterm" / "tty"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_path = log_dir / "test.log"
     log_content = """$ ls -la
 total 12
 drwxr-xr-x 2 user user 4096 Jan 1 12:00 .

@@ -2,7 +2,7 @@
 
 import os
 import platform
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from aixterm.utils import get_logger
 
@@ -24,66 +24,176 @@ class StatusManager:
         self.cleanup_manager = self.app.cleanup_manager
 
     def show_status(self) -> None:
-        """Show AIxTerm status information."""
-        self.logger.info("Showing status information")
+        """Show concise AIxTerm status information.
 
-        # Print header to match test expectations
+        New format focuses on high‑value operational signals instead of
+        duplicative platform metadata. Sections displayed in a fixed
+        order for quick visual scan.
+        """
+        self.logger.info("Showing status information (concise format)")
+
+        summary = self._collect_status_summary()
+
+        # Header kept for backwards compatibility with tests looking for it
         self.display_manager.show_info("AIxTerm Status")
 
-        # Collect status information
-        status_info = self._collect_status_info()
+        # Core runtime
+        core = summary.get("core", {})
+        self.display_manager.show_info(
+            f"Core: version={core.get('version')} config={core.get('config_path')}"
+        )
 
-        # Display status sections
-        for section, data in status_info.items():
-            self.display_manager.show_info(f"\n{section}:")
+        # Services
+        services = summary.get("services", {})
+        self.display_manager.show_info(
+            "Services: server={server_status} llm_api={llm_status}".format(
+                server_status=services.get("server", "unknown"),
+                llm_status=services.get("llm_api", "unknown"),
+            )
+        )
 
-            for key, value in data.items():
-                self.display_manager.show_info(f"  {key}: {value}")
+        # Shell integrations compact list
+        integ = summary.get("shell", {})
+        installed = [k for k, v in integ.items() if v.get("installed")]
+        not_installed = [k for k, v in integ.items() if not v.get("installed")]
+        self.display_manager.show_info(
+            "Shell: installed={installed} missing={missing}".format(
+                installed=",".join(installed) or "none",
+                missing=",".join(not_installed) or "none",
+            )
+        )
 
-    def _collect_status_info(self) -> Dict[str, Dict[str, Any]]:
-        """Collect status information.
+        # Context + cleanup
+        context = summary.get("context", {})
+        self.display_manager.show_info(
+            "Context: tokens={tokens} history={history} last_update={last}".format(
+                tokens=context.get("token_count"),
+                history=context.get("history_count"),
+                last=context.get("last_updated"),
+            )
+        )
 
-        Returns:
-            Status information by section
-        """
-        # Collect system information
-        system_info = {
-            "OS": platform.system(),
-            "Python Version": platform.python_version(),
-            "Platform": platform.platform(),
-            "Working Directory": os.getcwd(),
+        cleanup = summary.get("cleanup", {})
+        # Emit legacy header expected by tests plus concise summary line
+        self.display_manager.show_info("\nCleanup Status:")
+        self.display_manager.show_info(
+            "Cleanup: last={last} next={next} items={items} freed={freed}".format(
+                last=cleanup.get("last_cleanup"),
+                next=cleanup.get("next_cleanup"),
+                items=cleanup.get("items_cleaned"),
+                freed=cleanup.get("bytes_freed"),
+            )
+        )
+
+        # Active TTY log path
+        log_path = summary.get("logs", {}).get("active_log")
+        if log_path:
+            self.display_manager.show_info(f"TTY Log: {log_path}")
+
+        # Plugin summary (if available later we can enrich)
+        plugins = summary.get("plugins", {})
+        if plugins:
+            self.display_manager.show_info(
+                "Plugins: total={total} active={active}".format(
+                    total=plugins.get("total", 0), active=plugins.get("active", 0)
+                )
+            )
+
+    def _collect_status_summary(self) -> Dict[str, Dict[str, Any]]:
+        """Collect concise status summary for display."""
+
+        # Core info
+        core = {
+            "version": self.config.get("version", "unknown"),
+            "config_path": str(self.config.config_path),
         }
 
-        # Collect AIxTerm information
-        aixterm_info = {
-            "Version": self.config.get("version", "unknown"),
-            "Config Path": str(self.config.config_path),
-        }
+        # Context stats
+        try:
+            context_stats = self.context_manager.get_context_stats()
+        except Exception:  # pragma: no cover - defensive
+            context_stats = {}
 
-        # Collect context information
-        context_stats = self.context_manager.get_context_stats()
         context_info = {
-            "Token Count": context_stats.get("token_count", 0),
-            "History Items": context_stats.get("history_count", 0),
-            "Context Size": f"{context_stats.get('context_size', 0)} bytes",
-            "Last Updated": context_stats.get("last_updated", "never"),
+            "token_count": context_stats.get("token_count", 0),
+            "history_count": context_stats.get("history_count", 0),
+            "last_updated": context_stats.get("last_updated", "never"),
         }
 
-        # Collect cleanup information
-        cleanup_stats = self.cleanup_manager.get_stats()
+        # Cleanup stats
+        try:
+            cleanup_stats = self.cleanup_manager.get_stats()
+        except Exception:  # pragma: no cover
+            cleanup_stats = {}
+
         cleanup_info = {
-            "Last Cleanup": cleanup_stats.get("last_cleanup", "never"),
-            "Next Cleanup": cleanup_stats.get("next_cleanup", "unknown"),
-            "Items Cleaned": cleanup_stats.get("items_cleaned", 0),
-            "Bytes Freed": f"{cleanup_stats.get('bytes_freed', 0)} bytes",
+            "last_cleanup": cleanup_stats.get("last_cleanup", "never"),
+            "next_cleanup": cleanup_stats.get("next_cleanup", "unknown"),
+            "items_cleaned": cleanup_stats.get("items_cleaned", 0),
+            "bytes_freed": cleanup_stats.get("bytes_freed", 0),
         }
+
+        # Shell integrations
+        shell_info: Dict[str, Dict[str, Any]] = {}
+        try:
+            from .shell_integration import ShellIntegrationManager  # local import
+
+            shell_mgr = ShellIntegrationManager(self.app)
+            shell_info = shell_mgr.get_integration_status()
+        except Exception:  # pragma: no cover
+            pass
+
+        # Services (server + LLM)
+        services = {}
+        try:
+            # Attempt to query server status via client if available
+            from aixterm.client.client import AIxTermClient  # lightweight import
+
+            client = AIxTermClient(config_path=str(self.config.config_path))
+            try:
+                srv = client.status()
+                services["server"] = srv.get("status", "unknown")
+                services["llm_api"] = (
+                    "ok" if srv.get("llm_api", {}).get("reachable") else "error"
+                )
+            except Exception:  # pragma: no cover
+                services["server"] = "unreachable"
+        except Exception:  # pragma: no cover
+            services["server"] = services.get("server", "unknown")
+
+        # Active log (placeholder - will be updated when log path refactor lands)
+        logs: Dict[str, Optional[str]] = {"active_log": None}
+        try:
+            # Try to locate current tty log via context manager (if has attribute)
+            if hasattr(self.context_manager, "log_processor"):
+                lp = getattr(self.context_manager, "log_processor")
+                if hasattr(lp, "find_log_file"):
+                    log_path = lp.find_log_file(use_current_tty=True)
+                    if log_path:
+                        logs["active_log"] = str(log_path)
+        except Exception:  # pragma: no cover
+            pass
+
+        # Plugin summary (minimal; expanded later if plugin manager exposes stats)
+        plugins: Dict[str, Any] = {}
+        try:
+            if hasattr(self.app, "plugin_manager"):
+                pm = self.app.plugin_manager
+                if hasattr(pm, "plugins"):
+                    plugins_list = getattr(pm, "plugins") or []
+                    active = [p for p in plugins_list if getattr(p, "active", True)]
+                    plugins = {"total": len(plugins_list), "active": len(active)}
+        except Exception:  # pragma: no cover
+            pass
 
         return {
-            "System Information": system_info,
-            "Cleanup Status": cleanup_info,
-            "AIxTerm": aixterm_info,
-            "Context": context_info,
-            "Cleanup": cleanup_info,
+            "core": core,
+            "services": services,
+            "shell": shell_info,
+            "context": context_info,
+            "cleanup": cleanup_info,
+            "logs": logs,
+            "plugins": plugins,
         }
 
     def cleanup_now(self) -> None:

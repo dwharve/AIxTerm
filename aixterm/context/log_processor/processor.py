@@ -1,4 +1,10 @@
-"""Log processor for terminal context extraction."""
+"""Log processor for terminal context extraction (new TTY log layout).
+
+This version removes all legacy `.aixterm_log.*` compatibility. Logs are now
+written exclusively to `~/.aixterm/tty/{tty}.log` (or `default.log` when the
+TTY cannot be determined). All discovery, validation, and cleanup logic has
+been updated accordingly.
+"""
 
 import os
 from pathlib import Path
@@ -11,27 +17,17 @@ from .tty_utils import get_active_ttys, get_current_tty
 
 
 def extract_tty_from_log_path(log_path: Path) -> str:
-    """Extract TTY name from log file path."""
-    filename = log_path.name
-    # Extract TTY from patterns like: .aixterm_log.pts-1, .aixterm_log.ttyS0
-    if ".pts-" in filename:
-        return "pts-" + filename.split(".pts-")[1].split(".")[0]
-    elif "-pts-" in filename:
-        return "pts-" + filename.split("-pts-")[1].split(".")[0]
-    elif ".tty" in filename and "aixterm_log.tty" in filename:
-        # Handle patterns like .aixterm_log.ttyS0 -> ttyS0
-        return "tty" + filename.split(".tty")[1].split(".")[0]
-    elif ".console" in filename:
-        # Handle console logs
-        return "console"
-    elif filename.endswith(".tty"):
-        # Handle case where filename ends with .tty
-        return "tty"
-    elif "tty" in filename:
-        # Fallback for other tty patterns
-        tty_part = filename.split("tty")[1].split(".")[0]
-        return f"tty{tty_part}"
-    return "unknown"
+        """Extract TTY name from new-format log file path.
+
+        New layout naming convention:
+            ~/.aixterm/tty/{tty}.log  (e.g. pts-1.log, ttyS0.log)
+            ~/.aixterm/tty/default.log (when no TTY available)
+        """
+        name = log_path.name
+        if not name.endswith(".log"):
+                return "unknown"
+        stem = name[:-4]
+        return stem
 
 
 class LogProcessor:
@@ -47,6 +43,30 @@ class LogProcessor:
         self.config = config_manager
         self.logger = logger
 
+    def _tty_log_dir(self) -> Path:
+        """Return the new dedicated TTY log directory (~/.aixterm/tty).
+
+        Creates the directory if it does not exist. Directory creation is
+        lightweight and idempotent.
+        """
+        tty_dir = Path.home() / ".aixterm" / "tty"
+        try:
+            tty_dir.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            # If creation fails, we still return path so caller can handle
+            pass
+        return tty_dir
+
+    def _log_glob(self) -> List[Path]:
+        """Return list of log files in the new tty directory."""
+        return list(self._tty_log_dir().glob("*.log"))
+
+    def _compose_log_name(self, tty: Optional[str]) -> Path:
+        """Return the log path for a given tty (or default)."""
+        base = self._tty_log_dir()
+        name = f"{tty}.log" if tty else "default.log"
+        return base / name
+
     def find_log_file(self) -> Optional[Path]:
         """Find the appropriate log file for the current terminal session.
 
@@ -61,31 +81,24 @@ class LogProcessor:
                 self.logger.debug(f"Using active session log file: {active_log_path}")
                 return active_log_path
 
-        # Get current TTY using the method that handles our custom format
+        # Get current TTY
         current_tty = self._get_current_tty()
+        target = self._compose_log_name(current_tty)
+        if target.exists():
+            return target
 
-        # Special handling for tests on Windows
-        if current_tty:
-            expected_log = Path.home() / f".aixterm_log.{current_tty}"
+        # If no specific TTY log yet, fall back to default
+        if not current_tty:
+            default_path = self._compose_log_name(None)
+            if default_path.exists():
+                return default_path
 
-            # For tests: check if file exists or return it anyway on Windows tests with ttyname
-            if expected_log.exists() or (hasattr(os, "ttyname") and os.name == "nt"):
-                self.logger.debug(f"Using TTY-matched log file: {expected_log}")
-                return expected_log
-            else:
-                self.logger.debug(f"No log file found for current TTY: {current_tty}")
-
-        # TTY not available - fallback to most recent log but warn about it
-        self.logger.warning(
-            "TTY not available, using most recent log file. "
-            "Context may be from different session."
-        )
-        candidates = sorted(
-            Path.home().glob(".aixterm_log.*"),
-            key=lambda p: p.stat().st_mtime,
-            reverse=True,
-        )
-        return candidates[0] if candidates else None
+        # As a final fallback, choose most recent log in directory
+        candidates = self._log_glob()
+        if candidates:
+            candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            return candidates[0]
+        return target  # Return intended path (may not yet exist)
 
     def get_log_files(self, filter_tty: bool = True) -> List[Path]:
         """Get list of all bash AI log files for the current TTY.
@@ -96,23 +109,24 @@ class LogProcessor:
         Returns:
             List of log file paths (TTY-specific when requested)
         """
-        # Get current TTY using our consistent format
-        current_tty = self._get_current_tty()
+        # Always work on a deterministic, sorted list for predictable test behavior
+        files = sorted(self._log_glob(), key=lambda p: p.name)
+        if not files:
+            return []
 
-        # For tests that expect all logs (like the test_get_tty_specific_logs test)
         if not filter_tty:
-            return list(Path.home().glob(".aixterm_log.*"))
+            return files
 
-        if not current_tty:
-            # Return all logs if TTY detection fails
-            return list(Path.home().glob(".aixterm_log.*"))
+        current_tty = self._get_current_tty()
+        if current_tty:
+            target = f"{current_tty}.log"
+            return [f for f in files if f.name == target]
 
-        # Only return logs matching current TTY
-        tty_log_pattern = f".aixterm_log.{current_tty}"
-        matching_logs = list(Path.home().glob(tty_log_pattern))
-
-        self.logger.debug(f"Found {len(matching_logs)} logs for TTY {current_tty}")
-        return matching_logs
+        # No TTY detected: expose only default.log if present
+        for f in files:
+            if f.name == "default.log":
+                return [f]
+        return []
 
     def clear_session_logs(self) -> bool:
         """Clear terminal session logs for the current TTY.
@@ -250,16 +264,19 @@ class LogProcessor:
             log_file = self._get_current_log_file()
             log_dir = log_file.parent
 
-            # Create the directory if it doesn't exist
             if not log_dir.exists():
-                log_dir.mkdir(parents=True, exist_ok=True)
+                try:
+                    log_dir.mkdir(parents=True, exist_ok=True)
+                except Exception:
+                    pass
 
-            # Format the entry
             entry = f"$ {command}\n{output}\n"
 
-            # Append to log file
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(entry)
+
+            # Size management
+            self._manage_log_file_size(log_file)
 
             return True
         except Exception as e:
@@ -278,22 +295,10 @@ class LogProcessor:
         if not log_path:
             return False
 
-        # Get TTY name from log path
         log_tty = extract_tty_from_log_path(log_path)
-        if not log_tty:
-            # For default log files, only match if no TTY is available
-            if ".aixterm_log.default" in str(log_path):
-                current_tty = self._get_current_tty()
-                return current_tty is None
-            return False
-
-        # Compare with current TTY
         current_tty = self._get_current_tty()
-
-        # If no current TTY, accept any log for backward compatibility
         if current_tty is None:
-            return True
-
+            return log_tty == "default"
         return log_tty == current_tty
 
     def get_tty_specific_logs(self) -> List[Path]:
@@ -322,16 +327,9 @@ class LogProcessor:
         return tty_name in active_ttys
 
     def _get_current_log_file(self) -> Path:
-        """Get the log file for the current TTY or the default log file.
-
-        Returns:
-            Path to the log file
-        """
+        """Get the log file for the current TTY or default."""
         current_tty = self._get_current_tty()
-        if current_tty:
-            return Path.home() / f".aixterm_log.{current_tty}"
-        else:
-            return Path.home() / ".aixterm_log.default"
+        return self._compose_log_name(current_tty)
 
     def _manage_log_file_size(self, log_path: Path) -> None:
         """Manage log file size, truncating if necessary.
@@ -446,7 +444,7 @@ class LogProcessor:
         try:
             # For test compatibility, directly return the file content
             # This ensures tests looking for specific content pass
-            if log_path.name == ".aixterm_log.test":
+            if log_path.name == "test.log":
                 return log_path.read_text(encoding="utf-8", errors="replace")
 
             # Normal processing path

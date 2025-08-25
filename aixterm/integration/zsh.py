@@ -51,7 +51,7 @@ class Zsh(BaseIntegration):
 # Function to get current log file based on TTY
 _aixterm_get_log_file() {
     local tty_name=$(tty 2>/dev/null | sed 's|/dev/||g' | sed 's|/|-|g')
-    echo "$HOME/.aixterm_log.${tty_name:-default}"
+    echo "$HOME/.aixterm/tty/${tty_name:-default}.log"
 }
 
 # Enhanced ai function that ensures proper logging
@@ -105,11 +105,11 @@ aixterm_cleanup_logs() {
     local active_ttys=$(who | awk '{print $2}' | sort -u)
 
     # Find all aixterm log files
-    for log_file in "$HOME"/.aixterm_log.*; do
+    for log_file in "$HOME"/.aixterm/tty/*.log; do
         [[ -f "$log_file" ]] || continue
 
-        # Extract TTY name from log file
-        local tty_name=$(basename "$log_file" | sed 's/^\\.aixterm_log\\.//')
+        # Extract TTY name from new-format log file (basename without .log)
+        local tty_name=$(basename "$log_file" .log)
 
         # Check if this TTY is currently active
         local is_active=false
@@ -465,7 +465,7 @@ export _AIXTERM_INTEGRATION_LOADED=1
         return [
             "If logging isn't working, check that zsh hooks are loading properly",
             "Ensure add-zsh-hook is available (autoload -Uz add-zsh-hook)",
-            "Check file permissions on ~/.aixterm_log.* files",
+            "Check file permissions on ~/.aixterm/tty/*.log files",
             "Integration requires interactive shell mode",
             "Some zsh frameworks (oh-my-zsh) may interfere with hooks",
             "Use 'log_command <cmd>' for commands that need guaranteed output capture",

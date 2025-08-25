@@ -246,12 +246,8 @@ class CleanupManager:
         return results
 
     def _get_log_files(self) -> List[Path]:
-        """Get list of all AIxTerm log files.
-
-        Returns:
-            List of log file paths
-        """
-        return list(Path.home().glob(".aixterm_log.*"))
+        """Get list of all AIxTerm log files in new tty directory."""
+        return list((Path.home() / ".aixterm" / "tty").glob("*.log"))
 
     def _get_active_ttys(self) -> List[str]:
         """Get list of currently active TTY sessions.
@@ -292,9 +288,9 @@ class CleanupManager:
             TTY name or None if not a TTY-based log
         """
         filename = log_path.name
-        if filename.startswith(".aixterm_log."):
-            tty_name = filename[13:]  # Remove ".aixterm_log." prefix
-            return tty_name if tty_name != "default" else None
+        if filename.endswith(".log"):
+            stem = filename[:-4]
+            return stem if stem != "default" else None
         return None
 
     def _is_tty_active(self, tty_name: str, active_ttys: List[str]) -> bool:
@@ -398,7 +394,7 @@ class CleanupManager:
         # Collect cleanup statistics
         try:
             # Find log directory
-            log_dir = self._get_log_dir()
+            log_dir = Path.home() / ".aixterm" / "tty"
             log_files = list(log_dir.glob("*.log")) if log_dir.exists() else []
 
             # Calculate total size

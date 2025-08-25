@@ -61,6 +61,14 @@ def parse_arguments() -> argparse.Namespace:
         help="Show AIxTerm status information",
     )
 
+    # Service control options
+    parser.add_argument(
+        "-r",
+        "--restart",
+        action="store_true",
+        help="Restart the background AIxTerm service (for config/plugin reload)",
+    )
+
     # Debug options
     parser.add_argument(
         "--debug",
@@ -235,6 +243,26 @@ def main() -> None:
         # Handle status display
         if args.status:
             status_manager.show_status()
+            return
+
+        # Handle service restart (before other potentially long-running operations)
+        if getattr(args, "restart", False):  # use getattr for compatibility with older mocks
+            from aixterm.client.client import AIxTermClient  # local import to avoid startup cost
+
+            app.display_manager.show_info("Requesting service restart...")
+            client = AIxTermClient(config_path=args.config)
+            try:
+                response = client.control("restart")
+            except Exception as e:  # network / IPC errors
+                app.display_manager.show_error(f"Failed to send restart command: {e}")
+                return
+
+            if response.get("status") == "success":
+                app.display_manager.show_success("Service restart initiated.")
+            else:
+                err = response.get("error", {})
+                msg = err.get("message", "Unknown error")
+                app.display_manager.show_error(f"Service restart failed: {msg}")
             return
 
         # Handle tool listing

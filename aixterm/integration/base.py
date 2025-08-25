@@ -111,83 +111,110 @@ class BaseIntegration(ABC):
         return self.find_config_file()
 
     def is_integration_installed(self, config_file: Path) -> bool:
-        """Check if integration is already installed in config file.
-
-        Args:
-            config_file: Path to shell config file
-
-        Returns:
-            True if integration is already installed
-        """
+        """Return True if user config contains a source line for rc file."""
         if not config_file.exists():
             return False
-
         try:
             content = config_file.read_text()
-            return self.integration_marker in content
-        except Exception as e:
+            rc_ref = f".aixterm/{self.shell_name}.rc"
+            return rc_ref in content
+        except Exception as e:  # pragma: no cover - defensive
             self.logger.error(f"Error checking integration status: {e}")
             return False
 
     def install(self, force: bool = False, interactive: bool = True) -> bool:
-        """Install the shell integration.
+        """Install integration using standalone rc file under ~/.aixterm.
 
-        Args:
-            force: Whether to force reinstall if already installed
-            interactive: Whether to prompt user for input
-
-        Returns:
-            True if installation successful
+        Strategy:
+        - Write full script to ~/.aixterm/{shell}.rc (always refresh if force).
+        - Append a small sourcing block to user config if missing or force.
+        - Do not inline entire script into user config anymore.
         """
-        print(f"Installing AIxTerm {self.shell_name} integration...")
+        print(f"Installing AIxTerm {self.shell_name} integration (rc mode)...")
 
         config_file = self.find_config_file()
         if not config_file:
             print(f"Error: Could not determine {self.shell_name} config file location")
             return False
-
-        # Check if shell is available
         if not self.is_available():
             print(f"Error: {self.shell_name} is not available on this system")
             return False
-
-        # Validate environment
         if not self.validate_integration_environment():
             print(f"Error: Environment validation failed for {self.shell_name}")
             return False
 
-        # Ensure parent directory exists (important for fish)
         config_file.parent.mkdir(parents=True, exist_ok=True)
+        rc_dir = Path.home() / ".aixterm"
+        try:
+            if not rc_dir.exists():
+                rc_dir.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:  # pragma: no cover - race/parallel safety
+            # Directory was created between exists() check and mkdir; safe to proceed
+            pass
+        except Exception:
+            print("Error: Unable to create AIxTerm rc directory")
+            return False
+        rc_file = rc_dir / f"{self.shell_name}.rc"
 
-        # Check if already installed
-        if self.is_integration_installed(config_file):
-            if not force:
-                print(
-                    f"Warning: AIxTerm integration already installed in {config_file}"
-                )
-                if interactive:
-                    response = (
-                        input("Do you want to reinstall? (y/N): ").strip().lower()
-                    )
-                    if response != "y":
-                        print("Installation cancelled.")
-                        return False
-                else:
-                    # In non-interactive mode, don't reinstall by default
-                    print("Installation cancelled (already installed).")
-                    return False
-
-            # Remove existing integration
-            if not self._remove_existing_integration(config_file):
-                print("Error: Failed to remove existing integration")
+        if force or not rc_file.exists():
+            try:
+                rc_file.write_text(self.generate_integration_code().lstrip())
+                print(f" Wrote rc file: {rc_file}")
+            except Exception as e:  # pragma: no cover - defensive
+                print(f"Error writing rc file: {e}")
                 return False
 
-        # Create backup
-        if not self._create_backup(config_file):
-            print("Warning: Failed to create backup")
+        installed = self.is_integration_installed(config_file)
+        if installed and not force:
+            print(f" Integration already installed in {config_file}")
+            return True
 
-        # Install integration
-        return self._install_integration_code(config_file)
+        # Backup before modifying user config
+        if not self._create_backup(config_file):
+            print("Warning: Failed to create backup of shell config")
+
+        # If force reinstall, remove existing snippet after backup so user can recover
+        if force:
+            self._remove_existing_integration(config_file)
+
+        snippet = self._get_source_snippet(rc_file)
+        # Ensure config file exists before reading
+        if not config_file.exists():
+            try:
+                config_file.touch()
+            except Exception as e:  # pragma: no cover
+                print(f"Error creating shell config file: {e}")
+                return False
+        if not force:
+            try:
+                # Re-check after potential backup to avoid duplicate snippet
+                if f".aixterm/{self.shell_name}.rc" in config_file.read_text():
+                    return True
+            except Exception:  # pragma: no cover
+                pass
+        try:
+            with open(config_file, "a") as f:
+                if not snippet.endswith("\n"):
+                    snippet += "\n"
+                f.write(snippet)
+            print(f" Added sourcing snippet to {config_file}")
+        except Exception as e:  # pragma: no cover - defensive
+            print(f"Error updating shell config: {e}")
+            return False
+
+        print(" Installation complete. Source your shell config or open a new shell.")
+        return True
+
+    def _get_source_snippet(self, rc_file: Path) -> str:
+        """Return snippet inserted into user config to source rc file."""
+        return (
+            f"\n{self.integration_marker}\n"
+            f"# Source AIxTerm {self.shell_name} integration rc file\n"
+            f"AIXTERM_RC=\"$HOME/.aixterm/{rc_file.name}\"\n"
+            f"if [ -f \"$AIXTERM_RC\" ]; then\n"
+            f"    . \"$AIXTERM_RC\"\n"
+            f"fi\n"
+        )
 
     def uninstall(self) -> bool:
         """Uninstall the shell integration.
@@ -246,118 +273,57 @@ class BaseIntegration(ABC):
             return False
 
     def _remove_existing_integration(self, config_file: Path) -> bool:
-        """Remove existing integration from config file.
-
-        Args:
-            config_file: Path to config file
-
-        Returns:
-            True if removal successful
-        """
+        """Remove previously added sourcing snippet from user config."""
         try:
-            content = config_file.read_text()
-            if self.integration_marker not in content:
+            if not config_file.exists():
                 return True
-
-            lines = content.split("\n")
-
-            # Find the start and end of the integration block
-            start_idx = None
-            for i, line in enumerate(lines):
+            lines = config_file.read_text().splitlines()
+            rc_ref = f".aixterm/{self.shell_name}.rc"
+            filtered: list[str] = []
+            i = 0
+            total = len(lines)
+            while i < total:
+                line = lines[i]
+                # Primary (current) snippet starts with integration marker
                 if self.integration_marker in line:
-                    start_idx = i
-                    break
-
-            if start_idx is None:
-                return True  # No marker found
-
-            # Find the end of the integration block by looking for the next
-            # non-integration content
-            end_idx = len(lines)  # Default to end of file
-
-            for i in range(start_idx + 1, len(lines)):
-                line = lines[i].strip()
-
-                # If we hit an empty line and the next non-empty line doesn't
-                # look like integration
-                if line == "":
-                    # Look ahead to see if the next non-empty line is
-                    # integration-related
-                    for j in range(i + 1, len(lines)):
-                        next_line = lines[j].strip()
-                        if next_line == "":
-                            continue
-
-                        # Check if this line looks like integration code
-                        if not (
-                            (
-                                next_line.startswith("#")
-                                and any(
-                                    keyword in next_line.lower()
-                                    for keyword in [
-                                        "aixterm",
-                                        "shell integration",
-                                        "ai command",
-                                        "session",
-                                        "log",
-                                        "tty",
-                                        "timestamp",
-                                    ]
-                                )
-                            )
-                            or "_aixterm" in next_line
-                            or "aixterm" in next_line.lower()
-                            or "AIXTERM" in next_line
-                            or next_line.startswith("ai()")
-                            or "trap " in next_line
-                            or "[[ $- == *i* ]]" in next_line
-                            or '[[ -n "$_AIXTERM' in next_line
-                            or "history -a" in next_line
-                            or "tty 2>/dev/null" in next_line
-                            or "date '+%Y-%m-%d" in next_line
-                            or next_line.startswith("local ")
-                            or next_line.startswith("echo ")
-                            or next_line.startswith("command ")
-                            or next_line.startswith("export ")
-                            or next_line.startswith("}")
-                            or next_line.startswith("return")
-                            or next_line.startswith("fi")
-                            or "set -" in next_line
-                            or "autoload -Uz" in next_line
-                            or "add-zsh-hook" in next_line
-                            or next_line.startswith("if ")
-                            or next_line.startswith("function ")
-                            or next_line.startswith("then")
-                            or next_line.startswith("else")
-                            or next_line.startswith("eli")
-                            or next_line.startswith("end")  # fish
-                            or next_line.startswith("begin")  # fish
-                            or "test -" in next_line  # fish test
-                        ):
-                            # This looks like non-integration code
-                            # Use j, not i, since j is where the non-integration
-                            # content starts
-                            end_idx = j
-                            break
-                        else:
-                            # Still looks like integration code, keep going
-                            break
-                    else:
-                        # We reached the end of the file
-                        end_idx = len(lines)
-                        break
-
-            # Remove the integration block
-            filtered_lines = lines[:start_idx] + lines[end_idx:]
-
-            # Clean up any extra blank lines at the end
-            while filtered_lines and filtered_lines[-1].strip() == "":
-                filtered_lines.pop()
-
-            config_file.write_text("\n".join(filtered_lines))
+                    j = i + 1
+                    # Advance until we find closing 'fi' of the snippet block
+                    while j < total and lines[j].strip() != "fi":
+                        j += 1
+                    if j < total and lines[j].strip() == "fi":
+                        j += 1  # include fi
+                    # Skip trailing blank lines directly following the block
+                    while j < total and lines[j].strip() == "":
+                        j += 1
+                    i = j
+                    continue
+                # Legacy snippet patterns that might lack variable or marker handling
+                if rc_ref in line or "AIXTERM_RC=\"$HOME/.aixterm/" in line:
+                    # Attempt to skip an enclosing if block if present (line may be 'if [ -f ...')
+                    j = i + 1
+                    while j < total and lines[j].strip() != "fi":
+                        j += 1
+                    if j < total and lines[j].strip() == "fi":
+                        j += 1
+                    while j < total and lines[j].strip() == "":
+                        j += 1
+                    i = j
+                    continue
+                # Fallback legacy source comment line
+                if line.startswith("# Source AIxTerm "):
+                    i += 1
+                    continue
+                filtered.append(line)
+                i += 1
+            # Trim trailing blank lines
+            while filtered and filtered[-1].strip() == "":
+                filtered.pop()
+            new_content = "\n".join(filtered)
+            if new_content:
+                new_content += "\n"
+            config_file.write_text(new_content)
             return True
-
-        except Exception as e:
+        except Exception as e:  # pragma: no cover - defensive
             self.logger.error(f"Error removing existing integration: {e}")
             return False
 
@@ -370,29 +336,10 @@ class BaseIntegration(ABC):
         Returns:
             True if installation successful
         """
-        try:
-            integration_code = self.generate_integration_code()
-
-            with open(config_file, "a") as f:
-                f.write(integration_code)
-
-            print(f" Shell integration installed to: {config_file}")
-            print(f" To activate: source {config_file}")
-            print("   Or start a new terminal session")
-            print("")
-            print(" Usage:")
-            print('  ai "your question"     # AI command with automatic logging')
-            print("  # All terminal commands will be logged for context")
-            print("")
-            print(" Log files will be created at:")
-            print("  ~/.aixterm_log.*         # Session-specific log files")
-
-            return True
-
-        except Exception as e:
-            self.logger.error(f"Error installing integration: {e}")
-            print(f"Error: Failed to install integration: {e}")
-            return False
+        # Legacy method retained for backward compatibility; now a no-op since
+        # installation is handled via rc file + sourcing snippet.
+        print(" Deprecated inline installation path invoked; no action taken.")
+        return True
 
     def get_status(self) -> dict[str, Any]:
         """Get integration installation status for this shell.

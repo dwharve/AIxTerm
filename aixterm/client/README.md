@@ -1,14 +1,22 @@
 # Client Module
 
 ## Overview
-The client module provides HTTP client functionality for AIxTerm's server mode. This enables remote communication with AIxTerm instances running as web services.
+The client module provides communication with the unified local AIxTerm service
+over a Unix domain socket located in the user's home runtime directory:
+
+```
+~/.aixterm/server.sock
+```
+
+Legacy HTTP transport support has been removed – the application now auto-starts
+a single local socket service on demand.
 
 ## Key Components
 
 ### client.py
 - **AIxTermClient**: Main client class for communicating with AIxTerm service
-- **Dual Transport**: Supports both socket and HTTP communication modes
-- **Cross-Platform**: Handles Unix sockets on Linux/macOS, TCP on Windows
+- **Unified Transport**: Unix domain socket IPC (`.aixterm/server.sock`)
+- **Auto Start**: Launches the service transparently if not running
 - **Connection Management**: Automatic connection handling and error recovery
 - **Configuration Integration**: Uses AIxTermConfig for transport settings
 
@@ -16,7 +24,7 @@ The client module provides HTTP client functionality for AIxTerm's server mode. 
 
 ```
 client/
-├── client.py          # Main HTTP client implementation
+├── client.py          # Socket client implementation
 └── __init__.py        # Module exports
 ```
 
@@ -29,21 +37,17 @@ from aixterm.client import AIxTermClient
 # Initialize with default config
 client = AIxTermClient()
 
-# Connect to service (auto-detects transport mode)
-if client.connect():
-    response = client.send_request("list running processes")
-    print(response)
+# Send a request (auto-starts service & connects transparently)
+response = client.send_request("list running processes")
+print(response)
 ```
 
-### Transport Modes
-- **Socket Mode**: Fast Unix socket communication (Linux/macOS)
-- **HTTP Mode**: Web-based communication for remote access
-- **Auto-Detection**: Automatically selects best transport method
-- **Cross-Platform**: TCP fallback on Windows systems
-- **Configuration**: Transport mode configurable via AIxTermConfig
+### Transport
+All requests go through the local Unix domain socket. No configuration flags
+are required.
 
 ## Integration Points
-- **Server Module**: Communicates with `aixterm.server` endpoints
+- **Service Layer**: Communicates with the unified local service via socket
 - **Main Module**: Used by CLI when connecting to remote instances
 - **Config Module**: Inherits server URL and authentication settings
 
@@ -51,10 +55,9 @@ if client.connect():
 - Connection timeouts and retries
 - Authentication failures
 - Server error responses
-- Network connectivity issues
+- Socket availability & auto-start race handling
 
 ## Security Considerations
-- API key management
-- HTTPS enforcement for production
+- Minimal local attack surface (no open TCP port)
+- Local-only IPC (Unix domain socket)
 - Request/response validation
-- Rate limiting compliance

@@ -20,7 +20,12 @@ def devteam_plugin():
     """Create a DevTeam plugin instance for testing."""
     service = MockService()
     plugin = DevTeamPlugin(service)
-    return plugin
+    yield plugin
+    # Ensure background tasks are stopped to prevent pending task warnings
+    try:
+        plugin.shutdown()
+    except Exception:
+        pass
 
 
 def test_plugin_properties(devteam_plugin):

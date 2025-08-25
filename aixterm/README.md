@@ -444,8 +444,6 @@ ai --cleanup
 # Initialize configuration
 ai --init-config
 
-# Run in server mode
-ai --server
 ```
 
 ### Shell Integration
@@ -501,13 +499,6 @@ ai --file src/main.py --file tests/test.py --plan "refactor this code"
     },
     "tool_management": {
         "reserve_tokens_for_tools": 2000
-    },
-    "server_mode": {
-        "enabled": false,
-        "host": "localhost",
-        "port": 8081,
-        "transport": "http",
-        "keep_alive": true
     },
     "logging": {
         "level": "INFO",
@@ -693,7 +684,6 @@ The ToolOptimizer component intelligently selects tools based on:
 
 - **File Permissions**: Configuration files protected with appropriate permissions
 - **API Key Protection**: Secure storage and transmission of API keys
-- **Server Security**: HTTP server includes basic security measures
 - **Input Validation**: All inputs are validated and sanitized
 
 ### Privacy Protection
@@ -910,18 +900,10 @@ pip install -e .
 ai --api_url http://localhost:1234/v1/chat/completions "test query"
 ```
 
-### Server Deployment
+### Service Operation
 
-```bash
-# Run as HTTP server
-ai --server
-
-# Run with custom configuration
-ai --config /etc/aixterm/config.json --server
-
-# Docker deployment
-docker run -d -p 8081:8081 -v /path/to/config:/config aixterm --server
-```
+The AIxTerm service auto-starts on first use via a Unix domain socket located in
+`~/.aixterm/server.sock`. No separate `--server` flag is required or supported.
 
 ### Multi-User Environments
 
@@ -970,7 +952,7 @@ curl http://localhost:8081/status
 curl http://localhost:8081/tools
 
 # Monitor log files
-tail -f ~/.aixterm_log.*
+tail -f ~/.aixterm/tty/*.log
 ```
 
 ## Troubleshooting
@@ -996,7 +978,7 @@ ai --uninstall-shell --shell bash  # Clean uninstall
 
 # Manual verification
 grep -n "AIxTerm Shell Integration" ~/.bashrc
-ls -la ~/.aixterm_log.*
+ls -la ~/.aixterm/tty/*.log
 
 # Test shell functions (after installing integration)
 source ~/.bashrc
@@ -1012,7 +994,7 @@ ai --tools
 mcp-server-filesystem /path/to/project
 
 # Check server logs
-tail -f ~/.aixterm_log.*
+tail -f ~/.aixterm/tty/*.log
 ```
 
 #### Poor Response Quality
@@ -1058,7 +1040,7 @@ ai --init-config --force
 ai --cleanup
 
 # Or manual cleanup
-rm -f ~/.aixterm_log.*
+rm -f ~/.aixterm/tty/*.log
 rm -rf /tmp/aixterm_*
 ```
 

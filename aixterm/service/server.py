@@ -19,61 +19,20 @@ logger = logging.getLogger(__name__)
 
 
 class ServiceServer:
-    """
-    Server component that handles communication with AIxTerm clients.
-
-    This class implements a socket-based server that listens for client connections
-    and routes requests to the appropriate handlers.
-    """
+    """Socket server component for AIxTerm service (unified mode)."""
 
     def __init__(self, service):
-        """
-        Initialize the server with a reference to the parent service.
-
-        Args:
-            service: The parent AIxTerm service.
-        """
         self.service = service
+        from ..runtime_paths import get_socket_path
+
+        # Maintain compatibility with any legacy server config keys
         self.config = service.config.get("server", {})
-
-        # Socket settings
-        self.socket_path = self._get_socket_path()
-        self.socket = None
-
-        # HTTP settings (for HTTP mode)
-        self.http_host = self.config.get("http_host", "localhost")
-        self.http_port = self.config.get("http_port", 8087)
-        self.http_app = None
-        self.http_server = None
-
-        # Communication mode
-        self.mode = self.config.get("mode", "socket")  # 'socket' or 'http'
-
-        # Server state
+        self.socket_path = str(get_socket_path())
+        self.socket: socket.socket | None = None
+        self.mode = "socket"
         self._running = False
-        self._tasks = set()
-
-        # Request handlers
+        self._tasks: set = set()
         self.handlers = self._register_handlers()
-
-    def _get_socket_path(self) -> str:
-        """
-        Get the socket path from configuration or use a default.
-
-        Returns:
-            The path to the socket file.
-        """
-        socket_path = self.config.get("socket_path")
-
-        if socket_path:
-            path: str = os.path.expanduser(socket_path)
-            return path
-
-        # Default: use a socket file in the user's temp directory
-        socket_dir = os.path.join(tempfile.gettempdir(), "aixterm")
-        os.makedirs(socket_dir, exist_ok=True)
-        socket_path = os.path.join(socket_dir, "aixterm.sock")
-        return socket_path
 
     def _register_handlers(self) -> Dict[str, Callable]:
         """
@@ -86,22 +45,16 @@ class ServiceServer:
             "query": self._handle_query,
             "status": self._handle_status,
             "plugin": self._handle_plugin_request,
+            "control": self._handle_control_request,
         }
 
     async def start(self):
-        """Start the server and begin listening for client connections."""
+        """Start server and begin accepting connections."""
         if self._running:
             logger.warning("Server is already running")
             return
-
         self._running = True
-
-        if self.mode == "socket":
-            await self._start_socket_server()
-        elif self.mode == "http":
-            await self._start_http_server()
-        else:
-            raise ValueError(f"Unsupported server mode: {self.mode}")
+        await self._start_socket_server()
 
     async def _start_socket_server(self):
         """Start the socket-based server."""
@@ -150,37 +103,7 @@ class ServiceServer:
             self._running = False
             raise
 
-    async def _start_http_server(self):
-        """Start the HTTP-based server."""
-        try:
-            # Import web framework (e.g., aiohttp or FastAPI)
-            # We'll use aiohttp for simplicity
-            from aiohttp import web
-
-            logger.info(
-                f"Starting HTTP server at http://{self.http_host}:{self.http_port}"
-            )
-
-            # Create web app
-            self.http_app = web.Application()
-
-            # Register routes
-            self.http_app.router.add_post("/api", self._handle_http_request)
-            self.http_app.router.add_get("/status", self._handle_http_status)
-
-            # Start server
-            runner = web.AppRunner(self.http_app)
-            await runner.setup()
-            site = web.TCPSite(runner, self.http_host, self.http_port)
-            await site.start()
-
-            self.http_server = site
-            logger.info("HTTP server started successfully")
-
-        except Exception as e:
-            logger.error(f"Failed to start HTTP server: {e}")
-            self._running = False
-            raise
+    # Unified socket mode only; HTTP implementation removed.
 
     async def stop(self):
         """Stop the server and close all connections."""
@@ -199,7 +122,7 @@ class ServiceServer:
         if self._tasks:
             await asyncio.gather(*self._tasks, return_exceptions=True)
 
-        # Close socket or HTTP server
+    # Close socket
         if self.mode == "socket":
             if self.socket:
                 self.socket.close()
@@ -211,8 +134,7 @@ class ServiceServer:
             except OSError as e:
                 logger.error(f"Error removing socket file: {e}")
 
-        elif self.mode == "http" and self.http_server:
-            await self.http_server.stop()
+    # No HTTP branch
 
         logger.info("Server stopped successfully")
 
@@ -299,66 +221,7 @@ class ServiceServer:
             except Exception:
                 pass
 
-    async def _handle_http_request(self, request):
-        """
-        Handle an HTTP API request.
-
-        Args:
-            request: The aiohttp request object.
-
-        Returns:
-            An aiohttp response.
-        """
-        from aiohttp import web
-
-        try:
-            # Parse request body
-            request_data = await request.json()
-
-            # Process request
-            response = await self._process_request(request_data)
-
-            # Return JSON response
-            return web.json_response(response)
-
-        except json.JSONDecodeError:
-            return web.json_response(
-                {
-                    "status": "error",
-                    "error": {
-                        "code": "invalid_json",
-                        "message": "Invalid JSON request",
-                    },
-                },
-                status=400,
-            )
-        except Exception as e:
-            logger.error(f"Error handling HTTP request: {e}")
-            return web.json_response(
-                {
-                    "status": "error",
-                    "error": {
-                        "code": "internal_error",
-                        "message": "Internal server error",
-                    },
-                },
-                status=500,
-            )
-
-    async def _handle_http_status(self, request):
-        """
-        Handle an HTTP status request.
-
-        Args:
-            request: The aiohttp request object.
-
-        Returns:
-            An aiohttp response with service status.
-        """
-        from aiohttp import web
-
-        status = self.service.status()
-        return web.json_response(status)
+    # HTTP handlers removed.
 
     async def _process_request(self, request: Dict) -> Dict:
         """
@@ -467,6 +330,41 @@ class ServiceServer:
         status = self.service.status()
         return {"status": "success", "result": status}
 
+    async def _handle_control_request(self, request: Dict) -> Dict:
+        """Handle control commands (restart, etc.).
+
+        Args:
+            request: Request dict containing payload with 'command'.
+
+        Returns:
+            Response dict.
+        """
+        payload = request.get("payload", {})
+        command = payload.get("command")
+        if not command:
+            return {
+                "status": "error",
+                "error": {"code": "missing_control_command", "message": "No control command provided"},
+            }
+        if command == "restart":
+            # Perform async restart: stop then start fresh. Update service_id.
+            try:
+                await self.service.stop()
+                # Assign a new service_id to differentiate after restart
+                import uuid
+
+                self.service.service_id = str(uuid.uuid4())
+                await self.service.start()
+                return {"status": "success", "result": {"message": "Service restarted", "service_id": self.service.service_id}}
+            except Exception as e:
+                logger.error(f"Failed to restart service: {e}")
+                return {
+                    "status": "error",
+                    "error": {"code": "restart_failed", "message": str(e)},
+                }
+        else:
+            return {"status": "error", "error": {"code": "unknown_control_command", "message": f"Unknown control command: {command}"}}
+
     async def _handle_plugin_request(self, request: Dict) -> Dict:
         """
         Handle a plugin request.
@@ -525,12 +423,6 @@ class ServiceServer:
             "running": self._running,
             "mode": self.mode,
             "connections": len(self._tasks),
+            "socket_path": self.socket_path,
         }
-
-        if self.mode == "socket":
-            status["socket_path"] = self.socket_path
-        else:
-            status["http_host"] = self.http_host
-            status["http_port"] = self.http_port
-
         return status

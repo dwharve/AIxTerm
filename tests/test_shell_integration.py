@@ -307,83 +307,89 @@ class TestShellIntegrationInstallation:
     """Test cases for shell integration installation/uninstallation."""
 
     def test_install_with_temp_directory(self):
-        """Test installation in a temporary directory."""
+        """Test installation in a temporary directory (rc sourcing)."""
         integration = Bash()
 
         with tempfile.TemporaryDirectory() as temp_dir:
             config_file = Path(temp_dir) / ".bashrc"
+            home_patch = patch("pathlib.Path.home", return_value=Path(temp_dir))
 
-            with patch.object(
-                integration, "find_config_file", return_value=config_file
-            ):
-                with patch.object(integration, "is_available", return_value=True):
-                    with patch.object(
-                        integration,
-                        "validate_integration_environment",
-                        return_value=True,
-                    ):
-                        result = integration.install()
-
-                        assert result is True
-                        assert config_file.exists()
-
-                        content = config_file.read_text()
-                        assert "# AIxTerm Shell Integration" in content
-
-    def test_uninstall_with_temp_directory(self):
-        """Test uninstallation in a temporary directory."""
-        integration = Bash()
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_file = Path(temp_dir) / ".bashrc"
-
-            # Create a config file with integration
-            script = integration.generate_integration_code()
-            config_file.write_text(f"# Existing content\n{script}\n# More content")
-
-            with patch.object(
-                integration, "find_config_file", return_value=config_file
-            ):
-                result = integration.uninstall()
-
-                assert result is True
-
-                content = config_file.read_text()
-                assert "# AIxTerm Shell Integration" not in content
-                assert "# Existing content" in content
-                assert "# More content" in content
-
-    def test_reinstall_scenario(self):
-        """Test reinstalling over existing integration."""
-        integration = Bash()
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_file = Path(temp_dir) / ".bashrc"
-
-            # Create initial integration
-            script = integration.generate_integration_code()
-            config_file.write_text(f"# Original content\n{script}\n")
-
-            with patch.object(
-                integration, "find_config_file", return_value=config_file
-            ):
-                with patch.object(integration, "is_available", return_value=True):
-                    with patch.object(
-                        integration,
-                        "validate_integration_environment",
-                        return_value=True,
-                    ):
-                        with patch(
-                            "builtins.input", return_value="y"
-                        ):  # Confirm reinstall
+            with home_patch:
+                with patch.object(
+                    integration, "find_config_file", return_value=config_file
+                ):
+                    with patch.object(integration, "is_available", return_value=True):
+                        with patch.object(
+                            integration,
+                            "validate_integration_environment",
+                            return_value=True,
+                        ):
                             result = integration.install()
 
                             assert result is True
+                            assert config_file.exists()
 
                             content = config_file.read_text()
-                            # Should have integration marker only once
-                            marker_count = content.count("# AIxTerm Shell Integration")
-                            assert marker_count == 1
+                            # Now only a sourcing snippet should be present
+                            assert ".aixterm/bash.rc" in content
+                            # Rc file should exist
+                            rc_file = Path(temp_dir) / ".aixterm" / "bash.rc"
+                            assert rc_file.exists()
+
+    def test_uninstall_with_temp_directory(self):
+        """Test uninstallation removes sourcing snippet only."""
+        integration = Bash()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_file = Path(temp_dir) / ".bashrc"
+            rc_dir = Path(temp_dir) / ".aixterm"
+            rc_dir.mkdir(parents=True, exist_ok=True)
+            (rc_dir / "bash.rc").write_text("# bash rc content")
+            config_file.write_text(
+                "# Existing content\n# AIxTerm Shell Integration\nif [ -f \"$HOME/.aixterm/bash.rc\" ]; then\n    . \"$HOME/.aixterm/bash.rc\"\nfi\n# More content\n"
+            )
+
+            with patch("pathlib.Path.home", return_value=Path(temp_dir)):
+                with patch.object(
+                    integration, "find_config_file", return_value=config_file
+                ):
+                    result = integration.uninstall()
+
+                    assert result is True
+                    content = config_file.read_text()
+                    assert ".aixterm/bash.rc" not in content
+                    assert "# Existing content" in content
+                    assert "# More content" in content
+                    # Rc file should remain
+                    assert (rc_dir / "bash.rc").exists()
+
+    def test_reinstall_scenario(self):
+        """Test reinstalling updates sourcing snippet without duplication."""
+        integration = Bash()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_file = Path(temp_dir) / ".bashrc"
+            home_patch = patch("pathlib.Path.home", return_value=Path(temp_dir))
+            with home_patch:
+                with patch.object(
+                    integration, "find_config_file", return_value=config_file
+                ):
+                    with patch.object(integration, "is_available", return_value=True):
+                        with patch.object(
+                            integration,
+                            "validate_integration_environment",
+                            return_value=True,
+                        ):
+                            # First install
+                            assert integration.install() is True
+                            original = config_file.read_text()
+                            # Second install without force should be no-op
+                            assert integration.install() is True
+                            assert config_file.read_text() == original
+                            # Force reinstall should rewrite rc and snippet (but no duplicates)
+                            assert integration.install(force=True) is True
+                            content = config_file.read_text()
+                            assert content.count(".aixterm/bash.rc") == 1
 
 
 class TestTTYLogging:

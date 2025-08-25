@@ -308,7 +308,9 @@ class TerminalContext:
         Returns:
             List of log file paths
         """
-        return self.log_processor.get_log_files()
+        # For higher-level context usage we want visibility into all logs
+        # regardless of current TTY so broader history can be summarized.
+        return self.log_processor.get_log_files(filter_tty=False)
 
     def create_log_entry(self, command: str, result: str = "") -> None:
         """Create a log entry for a command (fallback method).

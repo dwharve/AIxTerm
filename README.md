@@ -1,8 +1,30 @@
+# Unified Service (No Separate Server Mode)
+
+The CLI now auto-starts a background Unix socket service as needed. There is no
+separate `--server` mode. All communication occurs through the socket at
+`~/.aixterm/server.sock`. This keeps startup transparent and removes extra flags.
+
+### Management Commands
+
+```bash
+# Show AIxTerm status
+ai --status
+
+```
+### Advanced Features
+
+AIxTerm includes an intelligent context system that:
+
+1. **Analyzes Current Directory**: Automatically detects project types and important files
+2. **Summarizes Terminal History**: Provides relevant recent commands and outputs
+3. **Manages Token Limits**: Intelligently truncates content to stay within model limits
+4. **Prioritizes Recent Activity**: Focuses on the most recent and relevant information
+
 # AIxTerm
 
 An AI-powered command-line assistant that helps you discover and execute shell commands through natural language queries. AIxTerm integrates with Large Language Models to provide intelligent, context-aware assistance for your terminal operations.
 
-**Current Version**: 0.1.3
+**Current Version**: 0.2.0 (unified Unix socket service in `~/.aixterm`)
 
 ## Features
 
@@ -23,7 +45,7 @@ An AI-powered command-line assistant that helps you discover and execute shell c
 
 ### Advanced Features
 - **MCP Server Support**: Integrates with Model Context Protocol servers for extended functionality
-- **HTTP Server Mode**: Can run as an HTTP server for integration with other applications
+- **Unified Local Service**: Auto-started Unix domain socket service (`~/.aixterm/server.sock`)
 - **Automatic Cleanup**: Manages log files and temporary data with configurable cleanup policies
 - **Token Management**: Intelligent token counting and content truncation for optimal LLM performance
 - **Command Extraction**: Advanced regex patterns to extract commands from various code block formats
@@ -66,7 +88,13 @@ source venv/bin/activate
 
 ## Configuration
 
-AIxTerm uses a configuration file located at `~/.aixterm_config.json`. You can create this file manually or let AIxTerm create it with default values on first run.
+AIxTerm uses a home runtime directory `~/.aixterm/` created on demand. The configuration file lives at:
+
+```
+~/.aixterm/config
+```
+
+If migrating from a previous version that used `~/.aixterm_config.json`, the new path consolidates under the same directory (`~/.aixterm/config`). See `MIGRATION.md` for details.
 
 ### Example Configuration
 ```json
@@ -160,17 +188,13 @@ ai --cleanup
 ai --help
 ```
 
-### Server Mode
-```bash
-# Run AIxTerm as an HTTP server
-ai --server --port 8080
+### Unified Service (No Separate Server Mode)
 
-# Server mode with custom configuration
-ai --server --port 8080 --config custom_config.json
+The CLI now auto-starts a background Unix socket service as needed. There is no
+separate `--server` mode. All communication occurs through the socket at
+`~/.aixterm/server.sock`. This keeps startup transparent and removes extra flags.
 
-# Server mode with specific host binding
-ai --server --host 0.0.0.0 --port 8080
-```
+For migration guidance consult `MIGRATION.md`.
 
 ## Advanced Features
 
@@ -185,10 +209,10 @@ AIxTerm includes an intelligent context system that:
 
 #### Terminal Session Logging
 
-For optimal context, AIxTerm automatically logs terminal sessions to provide better context for AI responses. The logging system:
+For optimal context, AIxTerm automatically logs terminal sessions to provide better context for AI responses. The logging system (new layout):
 
-- **Automatic Log Files**: Creates session-specific logs at `~/.aixterm_log.{tty_name}` 
-- **TTY Detection**: Automatically detects current terminal session using TTY information
+- **Automatic Log Files**: Creates session-specific logs at `~/.aixterm/tty/{tty_name}.log` (e.g. `pts-1.log`) and a `default.log` when no TTY is detected
+- **TTY Detection**: Automatically detects the current terminal session using TTY information
 - **Conversation History**: Maintains structured conversation records for context
 - **Smart Summarization**: Intelligently summarizes terminal history to avoid overwhelming the LLM
 
@@ -209,23 +233,16 @@ ai --install-shell --shell fish
 ai --uninstall-shell
 ```
 
-**Manual Methods**
-To capture all terminal activity manually, you can set up shell integration:
+**Manual Method (Fallback)**
+If you prefer a lightweight manual logger (without full integration scripts):
 
-**Method 1: Using `script` command**
 ```bash
-# Start a logged session
-script -f ~/.aixterm_log.$(tty | sed 's/\/dev\///g' | sed 's/\//-/g')
-# Then use aixterm normally in this session
-```
-
-**Method 2: Add to ~/.bashrc manually**
-```bash
-# Basic terminal logging for aixterm
+# Add to your ~/.bashrc
 log_for_aixterm() {
-    local tty_name=$(tty 2>/dev/null | sed 's/\/dev\///g' | sed 's/\//-/g')
-    local log_file="$HOME/.aixterm_log.${tty_name:-default}"
-    echo "$ $BASH_COMMAND" >> "$log_file" 2>/dev/null
+  local tty_name=$(tty 2>/dev/null | sed 's:/dev/::' | sed 's:/:-:g')
+  mkdir -p "$HOME/.aixterm/tty"
+  local log_file="$HOME/.aixterm/tty/${tty_name:-default}.log"
+  echo "$ $BASH_COMMAND" >> "$log_file" 2>/dev/null
 }
 trap 'log_for_aixterm' DEBUG
 ```
@@ -266,7 +283,6 @@ aixterm/
 ├── llm.py           # LLM client integration
 ├── mcp_client.py    # MCP server integration
 ├── cleanup.py       # Cleanup management
-├── server.py        # Server functionality
 └── utils.py         # Utility functions
 
 tests/

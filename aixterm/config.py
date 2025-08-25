@@ -1,4 +1,8 @@
-"""Configuration management for AIxTerm."""
+"""Configuration management for AIxTerm.
+
+Unified Unix domain socket architecture only; legacy HTTP code paths have
+been removed per project rules forbidding retention of dead code.
+"""
 
 import json
 from pathlib import Path
@@ -8,9 +12,14 @@ from .utils import get_logger
 
 
 class AIxTermConfig:
-    """Manages AIxTerm configuration with validation and MCP server support."""
+    """Manages AIxTerm configuration with validation and MCP server support.
 
-    DEFAULT_CONFIG_PATH = Path.home() / ".aixterm"
+    Runtime configuration lives at the fixed home directory path
+    '~/.aixterm/config'.
+    """
+
+    # Legacy default (home) retained only for migration; not used when None passed
+    LEGACY_HOME_PATH = Path.home() / ".aixterm"
 
     def __init__(self, config_path: Optional[Path] = None):
         """Initialize configuration manager.
@@ -18,16 +27,27 @@ class AIxTermConfig:
         Args:
             config_path: Custom path to configuration file
         """
+        from .runtime_paths import ensure_runtime_layout, get_config_file
+
         if config_path:
-            self.config_path: Path = config_path
+            if config_path.is_dir():
+                self.config_path = config_path / "config"
+            else:
+                self.config_path = config_path
         else:
-            self.config_path = self.DEFAULT_CONFIG_PATH
+            # Home directory default (~/.aixterm/config)
+            ensure_runtime_layout()
+            self.config_path = get_config_file()
         self.logger = get_logger(__name__)
         self._timing_initialized: bool = False
         self._config = self._load_config()
 
     def _get_default_config(self) -> Dict[str, Any]:
-        """Return default configuration."""
+        """Return default configuration.
+
+        Only currently supported keys are provided here; any extraneous keys
+        present in an on-disk config will be stripped during validation.
+        """
         return {
             "model": "local-model",
             "system_prompt": (
@@ -38,7 +58,7 @@ class AIxTermConfig:
                 "is required that may be inaccurate or unknown, search the web "
                 "rather than guessing. Use available tools when they are "
                 "appropriate to the user's request. Only include relevant output "
-                "in your responses. If web sources are used, cite them properly."
+                "in your responses. If web sources are used, cite them properly. "
                 "Citations should be located at the end of the response and in the "
                 "format:\n1. <title>\n<url>\n<snippet>\n\n2. ..."
             ),
@@ -53,8 +73,8 @@ class AIxTermConfig:
             ),
             "api_url": "http://localhost/v1/chat/completions",
             "api_key": "",
-            "context_size": 4096,  # Total context window size available
-            "response_buffer_size": 1024,  # Space reserved for LLM response
+            "context_size": 4096,
+            "response_buffer_size": 1024,
             "mcp_servers": [
                 {
                     "name": "pythonium",
@@ -71,58 +91,42 @@ class AIxTermConfig:
                 "cleanup_interval_hours": 24,
             },
             "tool_management": {
-                "reserve_tokens_for_tools": 1024,  # Reserve tokens for tool definitions
-                "max_tool_iterations": 5,  # Max iterations for tool execution loops
+                "reserve_tokens_for_tools": 1024,
+                "max_tool_iterations": 5,
                 "response_timing": {
-                    "average_response_time": 10.0,  # Average API response time
-                    "max_progress_time": 30.0,  # Max time to show progress before hung
-                    "progress_update_interval": 0.5,  # Progress update freq in seconds
+                    "average_response_time": 10.0,
+                    "max_progress_time": 30.0,
+                    "progress_update_interval": 0.5,
                 },
                 "tool_priorities": {
-                    # Essential execution tools (priority: 1000+)
                     "execute_command": 1000,
-                    # Tool introspection and discovery (priority: 900+)
                     "search_tools": 950,
                     "describe_tool": 900,
-                    # File operations (priority: 800+)
                     "read_file": 850,
                     "write_file": 840,
                     "find_files": 820,
                     "search_files": 810,
                     "delete_file": 800,
-                    # Web and network tools (priority: 600+)
                     "web_search": 650,
                     "http_client": 600,
                 },
             },
-            "server_mode": {
-                "enabled": False,  # Run as server instead of exiting immediately
-                "host": "localhost",  # Server host address
-                "port": 8081,  # Server port number
-                "transport": "http",  # Transport protocol (http, websocket)
-                "keep_alive": True,  # Keep server running after requests
-            },
         }
 
     def _validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        """Validate and fix configuration values.
+        """Validate and normalize configuration dictionary.
 
-        Args:
-            config: Configuration dictionary to validate
-
-        Returns:
-            Validated configuration dictionary
+        Missing keys are populated with defaults, invalid values corrected, and
+        any extraneous top-level keys removed for a clean, forward-only config.
         """
         defaults = self._get_default_config()
 
         # Ensure required keys exist
-        for key in defaults:
+        for key, value in defaults.items():
             if key not in config:
-                config[key] = defaults[key]
+                config[key] = value
 
-        # Validate specific values
-
-        # Validate context_size
+        # context_size
         try:
             config["context_size"] = max(
                 1000,
@@ -131,207 +135,173 @@ class AIxTermConfig:
         except (ValueError, TypeError):
             config["context_size"] = defaults["context_size"]
 
-        # Validate response_buffer_size
+        # response_buffer_size
         try:
             config["response_buffer_size"] = max(
                 100,
                 min(
                     4000,
-                    int(
-                        config.get(
-                            "response_buffer_size", defaults["response_buffer_size"]
-                        )
-                    ),
+                    int(config.get("response_buffer_size", defaults["response_buffer_size"])),
                 ),
             )
         except (ValueError, TypeError):
             config["response_buffer_size"] = defaults["response_buffer_size"]
 
-        # Ensure response buffer doesn't exceed total context size
         if config["response_buffer_size"] >= config["context_size"]:
             config["response_buffer_size"] = min(1024, config["context_size"] // 2)
 
-        # Validate api_url - convert to string if not string
+        # api_url
         if not isinstance(config.get("api_url"), str) or not config.get("api_url"):
             config["api_url"] = defaults["api_url"]
 
-        # Validate MCP servers configuration
+        # mcp_servers
         if not isinstance(config.get("mcp_servers"), list):
             config["mcp_servers"] = []
-
-        # Validate each MCP server configuration
-        validated_servers = []
+        validated_servers: List[Dict[str, Any]] = []
         for server in config["mcp_servers"]:
-            if isinstance(server, dict) and "name" in server and "command" in server:
-                # Only include servers with valid non-empty names
-                if server.get("name", "").strip():
-                    validated_servers.append(self._validate_mcp_server(server))
+            if (
+                isinstance(server, dict)
+                and server.get("name", "").strip()
+                and server.get("command")
+            ):
+                validated_servers.append(self._validate_mcp_server(server))
         config["mcp_servers"] = validated_servers
 
-        # Validate cleanup configuration
+        # cleanup
         if not isinstance(config.get("cleanup"), dict):
             config["cleanup"] = defaults["cleanup"]
         else:
-            cleanup = config["cleanup"]
-
-            # Keep only valid keys
-            valid_keys = {
-                "enabled",
-                "max_log_age_days",
-                "max_log_files",
-                "cleanup_interval_hours",
+            cleanup = {
+                k: v for k, v in config["cleanup"].items() if k in defaults["cleanup"]
             }
-            cleanup = {k: v for k, v in cleanup.items() if k in valid_keys}
-
-            # Set defaults for missing keys
-            cleanup.setdefault("enabled", True)
-            cleanup.setdefault("max_log_age_days", 30)
-            cleanup.setdefault("max_log_files", 10)
-            cleanup.setdefault("cleanup_interval_hours", 24)
-
-            # Convert string booleans to actual booleans
+            for k, v in defaults["cleanup"].items():
+                cleanup.setdefault(k, v)
+            # normalize types
             if isinstance(cleanup.get("enabled"), str):
-                cleanup["enabled"] = cleanup["enabled"].lower() in (
-                    "true",
-                    "yes",
-                    "1",
-                )
-
-            # Convert string numbers to integers
-            for key in [
-                "max_log_age_days",
-                "max_log_files",
-                "cleanup_interval_hours",
-            ]:
+                cleanup["enabled"] = cleanup["enabled"].lower() in {"true", "yes", "1"}
+            for num_key in ("max_log_age_days", "max_log_files", "cleanup_interval_hours"):
                 try:
-                    cleanup[key] = int(cleanup[key])
+                    cleanup[num_key] = int(cleanup[num_key])
                 except (ValueError, TypeError):
-                    cleanup[key] = defaults["cleanup"][key]
-
+                    cleanup[num_key] = defaults["cleanup"][num_key]
             config["cleanup"] = cleanup
 
-        # Validate tool management configuration
+        # tool_management
         if not isinstance(config.get("tool_management"), dict):
             config["tool_management"] = defaults["tool_management"]
         else:
-            tool_mgmt = config["tool_management"]
-            defaults_tool_mgmt = defaults["tool_management"]
-
-            # Validate reserve_tokens_for_tools
+            tm_defaults = defaults["tool_management"]
+            tm = {
+                k: v for k, v in config["tool_management"].items() if k in tm_defaults
+            }
+            for k, v in tm_defaults.items():
+                tm.setdefault(k, v)
+            # reserve_tokens_for_tools
             try:
-                tool_mgmt["reserve_tokens_for_tools"] = max(
+                tm["reserve_tokens_for_tools"] = max(
                     500,
                     min(
                         8000,
-                        int(tool_mgmt.get("reserve_tokens_for_tools", 2000)),
+                        int(
+                            tm.get(
+                                "reserve_tokens_for_tools",
+                                tm_defaults["reserve_tokens_for_tools"],
+                            )
+                        ),
                     ),
                 )
             except (ValueError, TypeError):
-                tool_mgmt["reserve_tokens_for_tools"] = defaults_tool_mgmt[
-                    "reserve_tokens_for_tools"
-                ]
-
-            # Validate max_tool_iterations
+                tm["reserve_tokens_for_tools"] = tm_defaults["reserve_tokens_for_tools"]
+            # max_tool_iterations
             try:
-                tool_mgmt["max_tool_iterations"] = max(
+                tm["max_tool_iterations"] = max(
                     1,
                     min(
                         20,
-                        int(tool_mgmt.get("max_tool_iterations", 5)),
+                        int(
+                            tm.get(
+                                "max_tool_iterations", tm_defaults["max_tool_iterations"]
+                            )
+                        ),
                     ),
                 )
             except (ValueError, TypeError):
-                tool_mgmt["max_tool_iterations"] = defaults_tool_mgmt[
-                    "max_tool_iterations"
-                ]
-
-            # Validate response_timing
-            if not isinstance(tool_mgmt.get("response_timing"), dict):
-                tool_mgmt["response_timing"] = defaults_tool_mgmt["response_timing"]
+                tm["max_tool_iterations"] = tm_defaults["max_tool_iterations"]
+            # response_timing
+            if not isinstance(tm.get("response_timing"), dict):
+                tm["response_timing"] = tm_defaults["response_timing"]
             else:
-                timing = tool_mgmt["response_timing"]
-                defaults_timing = defaults_tool_mgmt["response_timing"]
-
-                # Validate average_response_time
+                rt_defaults = tm_defaults["response_timing"]
+                rt = {
+                    k: v for k, v in tm["response_timing"].items() if k in rt_defaults
+                }
+                for k, v in rt_defaults.items():
+                    rt.setdefault(k, v)
                 try:
-                    timing["average_response_time"] = max(
+                    rt["average_response_time"] = max(
                         1.0,
-                        min(120.0, float(timing.get("average_response_time", 10.0))),
+                        min(
+                            120.0,
+                            float(
+                                rt.get(
+                                    "average_response_time",
+                                    rt_defaults["average_response_time"],
+                                )
+                            ),
+                        ),
                     )
                 except (ValueError, TypeError):
-                    timing["average_response_time"] = defaults_timing[
-                        "average_response_time"
-                    ]
-
-                # Validate max_progress_time
+                    rt["average_response_time"] = rt_defaults["average_response_time"]
                 try:
-                    timing["max_progress_time"] = max(
-                        5.0, min(300.0, float(timing.get("max_progress_time", 30.0)))
+                    rt["max_progress_time"] = max(
+                        5.0,
+                        min(
+                            300.0,
+                            float(
+                                rt.get(
+                                    "max_progress_time", rt_defaults["max_progress_time"]
+                                )
+                            ),
+                        ),
                     )
                 except (ValueError, TypeError):
-                    timing["max_progress_time"] = defaults_timing["max_progress_time"]
-
-                # Validate progress_update_interval
+                    rt["max_progress_time"] = rt_defaults["max_progress_time"]
                 try:
-                    timing["progress_update_interval"] = max(
+                    rt["progress_update_interval"] = max(
                         0.1,
-                        min(5.0, float(timing.get("progress_update_interval", 0.5))),
+                        min(
+                            5.0,
+                            float(
+                                rt.get(
+                                    "progress_update_interval",
+                                    rt_defaults["progress_update_interval"],
+                                )
+                            ),
+                        ),
                     )
                 except (ValueError, TypeError):
-                    timing["progress_update_interval"] = defaults_timing[
-                        "progress_update_interval"
-                    ]
-
-            # Validate tool_priorities
-            if not isinstance(tool_mgmt.get("tool_priorities"), dict):
-                tool_mgmt["tool_priorities"] = defaults_tool_mgmt["tool_priorities"]
+                    rt["progress_update_interval"] = rt_defaults["progress_update_interval"]
+                tm["response_timing"] = rt
+            # tool_priorities
+            if not isinstance(tm.get("tool_priorities"), dict):
+                tm["tool_priorities"] = tm_defaults["tool_priorities"]
             else:
-                # Validate each priority value is an integer
-                priorities = tool_mgmt["tool_priorities"]
-                validated_priorities = {}
-                for tool_name, priority in priorities.items():
+                priorities: Dict[str, int] = {}
+                for tool_name, priority in tm["tool_priorities"].items():
                     try:
-                        validated_priorities[tool_name] = int(priority)
+                        priorities[tool_name] = int(priority)
                     except (ValueError, TypeError):
-                        print(
-                            f"Warning: Invalid priority for tool '{tool_name}': "
-                            f"{priority}. Using default priority."
+                        self.logger.debug(
+                            f"Invalid priority for tool '{tool_name}': {priority} (discarded)"
                         )
-                        # Don't include invalid priorities
-                tool_mgmt["tool_priorities"] = validated_priorities
+                tm["tool_priorities"] = priorities
+            config["tool_management"] = tm
 
-            config["tool_management"] = tool_mgmt
-
-        # Validate server mode configuration
-        if not isinstance(config.get("server_mode"), dict):
-            config["server_mode"] = defaults["server_mode"]
-        else:
-            server_mode = config["server_mode"]
-            defaults_server_mode = defaults["server_mode"]
-
-            # Validate enabled
-            if not isinstance(server_mode.get("enabled"), bool):
-                server_mode["enabled"] = defaults_server_mode["enabled"]
-
-            # Validate host
-            if not isinstance(server_mode.get("host"), str):
-                server_mode["host"] = defaults_server_mode["host"]
-
-            # Validate port
-            try:
-                server_mode["port"] = max(
-                    1, min(65535, int(server_mode.get("port", 8081)))
-                )
-            except (ValueError, TypeError):
-                server_mode["port"] = defaults_server_mode["port"]
-
-            # Validate transport
-            if server_mode.get("transport") not in ["http", "websocket"]:
-                server_mode["transport"] = defaults_server_mode["transport"]
-
-            # Validate keep_alive
-            if not isinstance(server_mode.get("keep_alive"), bool):
-                server_mode["keep_alive"] = defaults_server_mode["keep_alive"]
+        # Remove extraneous top-level keys
+        allowed = set(defaults.keys())
+        for k in list(config.keys()):
+            if k not in allowed:
+                config.pop(k, None)
 
         return config
 
@@ -382,7 +352,9 @@ class AIxTermConfig:
                     config = json.load(f)
                 return self._validate_config(config)
             except (json.JSONDecodeError, IOError) as e:
-                self.logger.warning(f"Error loading config file: {e}. Using defaults.")
+                self.logger.warning(
+                    f"Error loading config file: {e}. Using defaults."
+                )
                 return self._get_default_config()
         else:
             # Config file doesn't exist, create it with defaults
@@ -530,41 +502,7 @@ class AIxTermConfig:
         )
         return reserve_tokens
 
-    def get_server_mode_config(self) -> Dict[str, Any]:
-        """Get server mode configuration.
-
-        Returns:
-            Server mode configuration dictionary
-        """
-        server_config: Dict[str, Any] = self._config.get("server_mode", {})
-        return server_config
-
-    def is_server_mode_enabled(self) -> bool:
-        """Check if server mode is enabled.
-
-        Returns:
-            True if server mode is enabled
-        """
-        enabled: bool = self.get_server_mode_config().get("enabled", False)
-        return enabled
-
-    def get_server_host(self) -> str:
-        """Get server host address.
-
-        Returns:
-            Server host address
-        """
-        host: str = self.get_server_mode_config().get("host", "localhost")
-        return host
-
-    def get_server_port(self) -> int:
-        """Get server port number.
-
-        Returns:
-            Server port number
-        """
-        port: int = self.get_server_mode_config().get("port", 8081)
-        return port
+    # Legacy network accessor methods removed.
 
     def create_default_config(self, overwrite: bool = False) -> bool:
         """Create a default configuration file.
@@ -595,7 +533,6 @@ class AIxTermConfig:
             "mcp_servers": default_config["mcp_servers"],
             "cleanup": default_config["cleanup"],
             "tool_management": default_config["tool_management"],
-            "server_mode": default_config["server_mode"],
         }
 
         with open(self.config_path, "w", encoding="utf-8") as f:

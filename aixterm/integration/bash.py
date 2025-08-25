@@ -70,7 +70,7 @@ _aixterm_get_log_file() {
     else
         tty_name=$(tty 2>/dev/null | sed 's|/dev/||g' | tr '/' '-')
     fi
-    echo "$HOME/.aixterm_log.${tty_name:-default}"
+    echo "$HOME/.aixterm/tty/${tty_name:-default}.log"
 }
 
 # Show integration status
@@ -175,7 +175,7 @@ aixterm_toggle_logging() {
 aixterm_cleanup_logs() {
     local days=${1:-7}
     echo "Cleaning up AIxTerm logs older than $days days..."
-    find "$HOME" -name ".aixterm_log.*" -type f -mtime +$days -delete 2>/dev/null
+    find "$HOME/.aixterm/tty" -name "*.log" -type f -mtime +$days -delete 2>/dev/null
     echo "Cleanup complete."
 }
 
@@ -310,7 +310,7 @@ fi
         return [
             "Integration requires the 'script' command (part of util-linux package)",
             "Check that the shell is interactive ([[ $- == *i* ]])",
-            "Ensure write permissions to ~/.aixterm_log.* files",
+            "Ensure write permissions to ~/.aixterm/tty/*.log files",
             "Use 'aixterm_status' to check integration and log file status",
             "If script session is stuck, use Ctrl+D or 'exit' to end it",
             "Full session logging uses 'exec script' which replaces the current shell",

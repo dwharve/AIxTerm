@@ -1,0 +1,28 @@
+# Rules
+- Identify any implemented systems/conventions that already exist before attempting to create new ones.
+- ALWAYS investigate errors to identify the root cause before attempting a fix.
+- Do NOT implement fallbacks, backwards compatibility, mock/stub implementations, or fake/simulated data/implementations.
+- Do NOT bypass code; instead, fix the root cause of an error.
+- The entire codebase MUST be kept up to date and free of legacy or dead code.
+- Do not change the architecture or design of the application without explicit permission.
+- Do not use emojis.
+
+## Terminal
+- Consider the current directory before attempting to 'cd'
+- If the last command returned an error, consider the error before determining the next command to execute.
+- If the task or last command does not return any output, run an echo command and then check the output of the last couple commands to identify if the original command returned before it should have. Using this method should provide the output of the original command.
+- If the task is cancelled by the user, check the output before determining how to proceed. The user may have cancelled the task due to a hanging process or the application not identifying that the command had finished.
+
+## Python
+- Debug a Python application by running python scripts via stdin of the Pythonium execute_command tool. This will avoid problematic escape formatting issues, provide a reliable interface to quickly troubleshoot issues, and alleviate the neeed to make one off debug script files. Ensure that you utilize the python command within the project's virtual environment.
+- ALWAYS ensure that the Python virtual environment is active in the current terminal before running commands that depend on Python packages.
+- Do not use the built-in 'help' method as that will cause the terminal to hang until the user interrupts it.
+
+## Errors
+- Implement increased debug logging when trying to troubleshoot or attempting to identify the root cause of an error.
+
+## Quality
+- At the end of an iteration that contained changes, run code quality checks defined in the Makefile for that project. e.g. 'make quality-check'
+
+## Tests
+- At the end of an iteration that contained changes, run tests defined in the Makefile for that project. e.g. 'make test'

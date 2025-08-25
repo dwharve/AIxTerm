@@ -201,9 +201,25 @@ class TestMCPServer:
     @patch("aixterm.mcp_client.asyncio.run_coroutine_threadsafe")
     def test_start_server(self, mock_run_coro, config, mock_logger, mock_loop):
         """Test starting server."""
+        # Provide a future whose result returns None and ensure created coroutine is closed
         mock_future = Mock()
         mock_future.result.return_value = None
-        mock_run_coro.return_value = mock_future
+
+        def _side_effect(coro, loop):
+            try:
+                import asyncio
+                try:
+                    asyncio.run(coro)
+                except RuntimeError:
+                    coro.close()
+            except Exception:
+                try:
+                    coro.close()
+                except Exception:
+                    pass
+            return mock_future
+
+        mock_run_coro.side_effect = _side_effect
 
         server = MCPServer(config, mock_logger, mock_loop)
         server.start()
@@ -217,7 +233,22 @@ class TestMCPServer:
         """Test server start failure."""
         mock_future = Mock()
         mock_future.result.side_effect = Exception("Start failed")
-        mock_run_coro.return_value = mock_future
+
+        def _side_effect(coro, loop):
+            try:
+                import asyncio
+                try:
+                    asyncio.run(coro)
+                except RuntimeError:
+                    coro.close()
+            except Exception:
+                try:
+                    coro.close()
+                except Exception:
+                    pass
+            return mock_future
+
+        mock_run_coro.side_effect = _side_effect
 
         # Mock the coroutine to avoid warnings
         with patch.object(MCPServer, "_initialize_session", mock_coro()):
@@ -242,7 +273,22 @@ class TestMCPServer:
             ) as mock_run_coro:
                 mock_future = Mock()
                 mock_future.result.return_value = None
-                mock_run_coro.return_value = mock_future
+
+                def _side_effect(coro, loop):
+                    try:
+                        import asyncio
+                        try:
+                            asyncio.run(coro)
+                        except RuntimeError:
+                            coro.close()
+                    except Exception:
+                        try:
+                            coro.close()
+                        except Exception:
+                            pass
+                    return mock_future
+
+                mock_run_coro.side_effect = _side_effect
 
                 server.stop()
 
@@ -307,7 +353,15 @@ class TestMCPServer:
 
             mock_future = Mock()
             mock_future.result.return_value = mock_result
-            mock_run_coro.return_value = mock_future
+
+            def _side_effect(coro, loop):
+                try:
+                    coro.close()
+                except Exception:
+                    pass
+                return mock_future
+
+            mock_run_coro.side_effect = _side_effect
 
         tools = server.list_tools()
 
@@ -342,7 +396,22 @@ class TestMCPServer:
 
             mock_future = Mock()
             mock_future.result.return_value = mock_result
-            mock_run_coro.return_value = mock_future
+
+            def _side_effect(coro, loop):
+                try:
+                    import asyncio
+                    try:
+                        asyncio.run(coro)
+                    except RuntimeError:
+                        coro.close()
+                except Exception:
+                    try:
+                        coro.close()
+                    except Exception:
+                        pass
+                return mock_future
+
+            mock_run_coro.side_effect = _side_effect
 
             result = server.call_tool("test_tool", {"arg": "value"})
 

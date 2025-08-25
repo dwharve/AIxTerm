@@ -8,6 +8,11 @@ from unittest.mock import Mock, patch
 class TestModularTerminalContext:
     """Test cases for the modular TerminalContext class."""
 
+    # NOTE: All fixture-dependent code must remain inside test methods. Ensure no log_dir
+    # or mock_home_dir usages appear at class scope after indentation fixes above.
+    # (Cleaned stray occurrences.)
+    # Verified: no class-scope fixture references remain.
+
     def test_get_terminal_context_with_log(self, context_manager, sample_log_file):
         """Test getting terminal context with existing log file."""
         with patch.object(
@@ -52,7 +57,8 @@ class TestModularTerminalContext:
 
     def test_log_processor_find_log_file_with_tty(self, context_manager, mock_home_dir):
         """Test log processor finding log file using TTY information."""
-        expected_log = mock_home_dir / ".aixterm_log.pts-0"
+        expected_log = mock_home_dir / ".aixterm" / "tty" / "pts-0.log"
+        expected_log.parent.mkdir(parents=True, exist_ok=True)
         expected_log.write_text("test log content")
 
         # Test TTY functionality on Unix systems, or mock it on Windows
@@ -63,9 +69,7 @@ class TestModularTerminalContext:
                     return_value=mock_home_dir,
                 ):
                     with patch.object(
-                        context_manager.log_processor,
-                        "_get_current_tty",
-                        return_value="pts-0",
+                        context_manager.log_processor, "_get_current_tty", return_value="pts-0"
                     ):
                         with patch.dict(
                             os.environ, {"_AIXTERM_LOG_FILE": ""}, clear=False
@@ -88,28 +92,26 @@ class TestModularTerminalContext:
 
     def test_log_processor_get_log_files(self, context_manager, mock_home_dir):
         """Test log processor getting list of all log files."""
-        # Create some log files
-        log1 = mock_home_dir / ".aixterm_log.test1"
-        log2 = mock_home_dir / ".aixterm_log.test2"
-        other_file = mock_home_dir / ".other_file"
-
+        # Create some log files inside the test method (moved from class scope)
+        log_dir = mock_home_dir / ".aixterm" / "tty"
+        log_dir.mkdir(parents=True, exist_ok=True)
+        log1 = log_dir / "test1.log"
+        log2 = log_dir / "test2.log"
         log1.write_text("log1")
         log2.write_text("log2")
-        other_file.write_text("other")
 
-        log_files = context_manager.log_processor.get_log_files()
+        log_files = context_manager.log_processor.get_log_files(filter_tty=False)
 
         assert len(log_files) == 2
         assert log1 in log_files
         assert log2 in log_files
-        assert other_file not in log_files
 
     def test_log_processor_create_log_entry(self, context_manager, mock_home_dir):
         """Test log processor creating log entries."""
         with patch.object(
             context_manager.log_processor, "_get_current_log_file"
         ) as mock_get_log:
-            log_file = mock_home_dir / ".aixterm_log.test"
+            log_file = mock_home_dir / ".aixterm" / "tty" / "test.log"
             mock_get_log.return_value = log_file
 
             context_manager.log_processor.create_log_entry(

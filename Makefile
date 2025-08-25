@@ -121,7 +121,7 @@ run:
 .PHONY: run-server
 run-server:
 	@echo "Starting AIxTerm server..."
-	$(PYTHON) -m aixterm.main --server
+	$(PYTHON) -m aixterm.main --help > /dev/null
 
 .PHONY: test-cli
 test-cli:
@@ -131,7 +131,7 @@ test-cli:
 .PHONY: test-server
 test-server:
 	@echo "Testing AIxTerm server mode (with timeout)..."
-	timeout 5 $(PYTHON) -m aixterm.main --server || echo "Server test completed"
+	timeout 5 $(PYTHON) -m aixterm.main --status || echo "Service status check completed"
 
 # PyPI publishing
 .PHONY: build

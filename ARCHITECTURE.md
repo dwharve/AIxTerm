@@ -846,9 +846,10 @@ class LogProcessor:
     def find_log_file(self) -> Optional[Path]:
         """Find the appropriate log file for the current terminal session."""
         # Using tty_utils for TTY detection
-        current_tty = self._get_current_tty()
-        expected_log = Path.home() / f".aixterm_log.{current_tty}"
-        return expected_log if expected_log.exists() else None
+    current_tty = self._get_current_tty()
+    # New layout: ~/.aixterm/tty/{tty}.log (or default.log when no TTY)
+    expected_log = Path.home() / ".aixterm" / "tty" / f"{current_tty or 'default'}.log"
+    return expected_log if expected_log.exists() else None
         
     def read_and_process_log(self, log_path, max_tokens=None, model_name=None, smart_summarize=True):
         """Read and process log file content with intelligent summarization."""
