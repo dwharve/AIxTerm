@@ -4,7 +4,6 @@ Specialized workflow step implementations.
 
 import asyncio
 import logging
-from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from .models import WorkflowStep, WorkflowStepType
@@ -12,7 +11,7 @@ from ..events import Event, EventType
 from ..types import TaskId, TaskPriority, TaskStatus, TaskType, WorkflowStepStatus
 
 if TYPE_CHECKING:
-    from .executor import WorkflowEngine
+    from .models import Workflow
 
 logger = logging.getLogger(__name__)
 

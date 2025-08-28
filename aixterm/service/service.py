@@ -299,7 +299,6 @@ class AIxTermService:
         Returns:
             The version string.
         """
-        # TODO: Get this from package metadata
         return "0.2.0"
 
     def _setup_signal_handlers(self):
