@@ -1,11 +1,11 @@
 """Command-line interface for AIxTerm."""
 
 import argparse
-import os
 import sys
 from typing import List, Optional
 
 from aixterm.utils import get_current_shell, get_logger
+from aixterm.config_env.env_vars import set_log_level
 from .shell_integration import ShellIntegrationManager
 from .status_manager import StatusManager
 from .tools_manager import ToolsManager
@@ -189,7 +189,7 @@ def main() -> None:
     # We intentionally set both environment variable (picked up by get_logger) and
     # adjust any already-created root/logger levels to DEBUG.
     if getattr(args, "debug", False):  # compatibility guard
-        os.environ["AIXTERM_LOG_LEVEL"] = "DEBUG"
+        set_log_level("DEBUG")
         import logging
 
         root_logger = logging.getLogger()

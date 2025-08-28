@@ -1,10 +1,11 @@
 """Utility functions and helpers for AIxTerm."""
 
 import logging
-import os
 import sys
 from pathlib import Path
 from typing import Optional
+
+from .config_env.env_vars import get_log_level, get_shell
 
 
 def get_logger(name: str, level: Optional[str] = None) -> logging.Logger:
@@ -38,7 +39,7 @@ def get_logger(name: str, level: Optional[str] = None) -> logging.Logger:
         logger.setLevel(getattr(logging, level.upper(), logging.WARNING))
     elif not logger.level or logger.level == logging.NOTSET:
         # Only set default if no level is already set
-        log_level = os.environ.get("AIXTERM_LOG_LEVEL", "WARNING")
+        log_level = get_log_level()
         logger.setLevel(getattr(logging, log_level.upper(), logging.WARNING))
 
     return logger
@@ -51,7 +52,7 @@ def get_current_shell() -> str:
         Shell name (bash, zsh, fish) or 'bash' as fallback
     """
     # Try SHELL environment variable first
-    shell_path = os.environ.get("SHELL", "")
+    shell_path = get_shell()
     if shell_path:
         shell_name = Path(shell_path).name
         if shell_name in ["bash", "zsh", "fish"]:

@@ -21,9 +21,10 @@ Runtime directory policy (updated):
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Optional
+
+from .config_env.env_vars import get_runtime_home
 
 PROJECT_MARKERS = {".git", "pyproject.toml"}  # retained for potential future use
 RUNTIME_DIR_NAME = ".aixterm"  # now always in user HOME
@@ -69,7 +70,7 @@ def get_runtime_dir(start: Optional[Path] = None) -> Path:
     Ignoring 'start' for runtime placement; directory is always at $HOME/.aixterm
     per updated requirements.
     """
-    override = os.environ.get("AIXTERM_RUNTIME_HOME")
+    override = get_runtime_home()
     if override:
         return Path(override) / RUNTIME_DIR_NAME
     return Path.home() / RUNTIME_DIR_NAME

@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional
 import os
 
 from ..config import AIxTermConfig
+from ..config_env.env_vars import get_pytest_current_test, get_test_idle_grace, get_test_idle_limit
 
 logger = logging.getLogger(__name__)
 
@@ -150,7 +151,7 @@ class AIxTermService:
             self._setup_signal_handlers()
 
             # In test/ephemeral environments (detected via PYTEST_CURRENT_TEST or temp runtime dir), add idle shutdown
-            if os.environ.get("PYTEST_CURRENT_TEST"):
+            if get_pytest_current_test():
                 asyncio.create_task(self._idle_shutdown_monitor())
 
         except Exception as e:
@@ -208,7 +209,7 @@ class AIxTermService:
         try:
             # Allow override of idle window for tests via env var (bounded 0.05s..10s)
             try:
-                idle_limit_env = float(os.environ.get("AIXTERM_TEST_IDLE_LIMIT", "2.0"))
+                idle_limit_env = get_test_idle_limit()
             except ValueError:
                 idle_limit_env = 2.0
             idle_limit = max(0.05, min(idle_limit_env, 10.0))
@@ -216,7 +217,7 @@ class AIxTermService:
             # before the idle monitor can trigger. This prevents very small idle limits
             # (e.g. 0.2s) from shutting down the service before the client connects.
             try:
-                grace_env = float(os.environ.get("AIXTERM_TEST_IDLE_GRACE", "0.4"))
+                grace_env = get_test_idle_grace()
             except ValueError:
                 grace_env = 0.4
             grace_period = max(0.1, min(grace_env, 5.0))
@@ -225,7 +226,7 @@ class AIxTermService:
             from .server import ServiceServer  # local import to avoid cycle at module load
             loop = asyncio.get_event_loop()
             start_time = loop.time()
-            while self._running and os.environ.get("PYTEST_CURRENT_TEST"):
+            while self._running and get_pytest_current_test():
                 await asyncio.sleep(check_interval)
                 # If server exists and last activity is older than idle_limit, shutdown
                 server = self.server
