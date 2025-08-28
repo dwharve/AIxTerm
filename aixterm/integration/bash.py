@@ -243,53 +243,9 @@ else
 fi
 """
 
-    def is_available(self) -> bool:
-        """Check if bash is available on the system."""
-        try:
-            import subprocess
-
-            result = subprocess.run(
-                ["bash", "--version"], capture_output=True, text=True, timeout=5
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
-
-    def get_current_shell_version(self) -> Optional[str]:
-        """Get the current bash version."""
-        try:
-            import subprocess
-
-            result = subprocess.run(
-                ["bash", "--version"], capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                # Extract version from first line
-                first_line = result.stdout.split("\n")[0]
-                return first_line.strip()
-            return None
-        except Exception:
-            return None
-
-    def validate_integration_environment(self) -> bool:
-        """Validate that the bash environment supports our integration."""
-        try:
-            # Check if we can detect TTY
-            tty_result = os.system("tty >/dev/null 2>&1")
-            if tty_result != 0:
-                return False
-
-            # Check if we can write to home directory
-            home = Path.home()
-            test_file = home / ".aixterm_test"
-            try:
-                test_file.write_text("test")
-                test_file.unlink()
-                return True
-            except Exception:
-                return False
-        except Exception:
-            return False
+    # Note: is_available() and validate_integration_environment() now use 
+    # default implementations from BaseIntegration. get_current_shell_version() 
+    # also uses the default implementation.
 
     def get_installation_notes(self) -> List[str]:
         """Return bash-specific installation notes."""

@@ -9,7 +9,7 @@ from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Type
 
 from .base import AbstractAgentBase
-from ...lifecycle import LifecycleManager
+from ....lifecycle import LifecycleManager
 
 logger = logging.getLogger(__name__)
 
