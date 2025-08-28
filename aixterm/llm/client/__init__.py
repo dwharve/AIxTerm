@@ -109,6 +109,7 @@ class LLMClient(LLMClientBase):
         show_thinking: bool = True,
         stream: bool = True,
         stream_callback: Optional[Callable[[str], None]] = None,
+        debug: bool = False,
     ) -> Dict[str, Any]:
         """Process a query with the LLM using the real pipeline.
 
@@ -182,24 +183,38 @@ class LLMClient(LLMClientBase):
 
         # Make non-streaming request (fallback or when stream disabled)
         response_data: Optional[Dict[str, Any]] = None
+        debug_info: Optional[Dict[str, Any]] = None
+        
         try:
-            response_data = self.requests.make_llm_request(
-                messages=messages,
-                tools=tools,
-                stream=False,
-                message_validator=self.message_validator,
-            )
+            if debug:
+                # When debug mode is enabled, capture the raw request and response
+                response_data, debug_info = self.requests.make_llm_request_with_debug(
+                    messages=messages,
+                    tools=tools,
+                    stream=False,
+                    message_validator=self.message_validator,
+                )
+            else:
+                response_data = self.requests.make_llm_request(
+                    messages=messages,
+                    tools=tools,
+                    stream=False,
+                    message_validator=self.message_validator,
+                )
         except Exception as e:
             self.logger.error(f"LLM request pipeline error: {e}")
 
         if not response_data or not isinstance(response_data, dict):
             self.logger.error("LLM request failed or returned no data")
-            return {
+            result = {
                 "content": "",
                 "thinking": "",
                 "tool_calls": [],
                 "elapsed_time": time.time() - start_time,
             }
+            if debug and debug_info:
+                result["debug"] = debug_info
+            return result
 
         # Extract content & tool calls
         choice = response_data.get("choices", [{}])[0].get("message", {})
@@ -216,6 +231,10 @@ class LLMClient(LLMClientBase):
             "tool_calls": tool_calls,
             "elapsed_time": elapsed,
         }
+
+        # Add debug information if requested
+        if debug and debug_info:
+            result["debug"] = debug_info
 
         # If there are tool calls, delegate to tool completion handler (iterative loop)
         if tool_calls:

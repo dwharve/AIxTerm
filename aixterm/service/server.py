@@ -319,6 +319,7 @@ class ServiceServer:
         payload = request.get("payload", {})
         question = payload.get("question")
         options = payload.get("options", {})
+        debug_mode = options.get("debug", False)
 
         if not question:
             return {
@@ -394,6 +395,7 @@ class ServiceServer:
                         show_thinking=True,
                         stream=True,
                         stream_callback=_cb,
+                        debug=debug_mode,
                     ),
                 )
 
@@ -430,6 +432,7 @@ class ServiceServer:
                     context_lines=context_lines,
                     show_thinking=True,
                     stream=False,
+                    debug=debug_mode,
                 ),
             )
 
