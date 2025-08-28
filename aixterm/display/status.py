@@ -75,18 +75,25 @@ class StatusDisplay:
         Args:
             seconds: Time in seconds
         """
-        # Format time nicely
-        if seconds < 0.1:
-            time_str = f"{seconds * 1000:.0f}ms"
-        elif seconds < 1:
-            time_str = f"{seconds * 1000:.1f}ms"
-        elif seconds < 60:
-            time_str = f"{seconds:.2f}s"
-        else:
-            minutes = int(seconds / 60)
-            remaining_seconds = seconds % 60
-            time_str = f"{minutes}m {remaining_seconds:.1f}s"
+        # Suppressed by default to keep CLI output clean.
+        # If desired in the future, re-enable via config/env flag.
+        try:
+            import os
+            if os.environ.get("AIXTERM_SHOW_TIMING", "").lower() in ("1", "true", "yes"):  # optional opt-in
+                # Format time nicely
+                if seconds < 0.1:
+                    time_str = f"{seconds * 1000:.0f}ms"
+                elif seconds < 1:
+                    time_str = f"{seconds * 1000:.1f}ms"
+                elif seconds < 60:
+                    time_str = f"{seconds:.2f}s"
+                else:
+                    minutes = int(seconds / 60)
+                    remaining_seconds = seconds % 60
+                    time_str = f"{minutes}m {remaining_seconds:.1f}s"
 
-        # Display as info message
-        formatted = f"[Completed in {time_str}]"
-        print(formatted)
+                formatted = f"[Completed in {time_str}]"
+                print(formatted)
+        except Exception:
+            # Fail closed (silent) on any unexpected error
+            pass

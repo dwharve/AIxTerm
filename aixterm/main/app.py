@@ -59,6 +59,7 @@ class AIxTermApp:
         no_prompt: bool = False,
         use_planning: bool = False,
         files: Optional[List[str]] = None,
+        stream: bool = True,
     ) -> None:
         """Run AIxTerm with the given query.
 
@@ -115,12 +116,14 @@ class AIxTermApp:
                     query=planning_prompt,
                     context_lines=context,
                     show_thinking=show_thinking,
+                    stream=stream,
                 )
             else:
                 response = self.llm_client.process_query(
                     query=query,
                     context_lines=context,
                     show_thinking=show_thinking,
+                    stream=stream,
                 )
             self._handle_response(response, query)
         except LLMError as e:
@@ -147,7 +150,11 @@ class AIxTermApp:
             return
 
         # Display and store the response
-        self.display_manager.show_response(response)
+        if isinstance(response, dict) and response.get("already_streamed"):
+            # Content already streamed to stdout; avoid double printing
+            pass
+        else:
+            self.display_manager.show_response(response)
 
         # Store the interaction
         self.context_manager.store_interaction(

@@ -14,6 +14,7 @@ import socket
 import tempfile
 import uuid
 from typing import Any, Callable, Dict
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,13 @@ class ServiceServer:
         self._running = False
         self._tasks: set = set()
         self.handlers = self._register_handlers()
+    # Track last client activity (query/any processed request) for idle shutdown logic
+    # Timestamp (float seconds) of last processed client request
+        # Use monotonic loop time reference for consistent comparison
+        try:
+            self.last_activity = asyncio.get_event_loop().time()
+        except Exception:
+            self.last_activity = time.time()
 
     def _register_handlers(self) -> Dict[str, Callable]:
         """
@@ -172,50 +180,69 @@ class ServiceServer:
             client_sock: The client socket.
         """
         loop = asyncio.get_event_loop()
-        request_data = bytearray()
-
+        buffer = bytearray()
         try:
-            # Read request data
-            while True:
-                chunk = await loop.sock_recv(client_sock, 4096)
-                if not chunk:
-                    break
-                request_data.extend(chunk)
-
-                # Check if we've received a complete message
-                if b"\n" in request_data:
+            while self._running:
+                try:
+                    chunk = await loop.sock_recv(client_sock, 4096)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as e:  # socket-level error
+                    logger.debug(f"Socket recv error, closing client connection: {e}")
                     break
 
-            if not request_data:
-                logger.warning("Received empty request from client")
-                return
+                if not chunk:  # client closed connection
+                    break
+                buffer.extend(chunk)
 
-            # Parse request
-            try:
-                request = json.loads(request_data.decode("utf-8"))
-            except json.JSONDecodeError:
-                logger.error("Received invalid JSON request")
-                response = {
-                    "status": "error",
-                    "error": {
-                        "code": "invalid_json",
-                        "message": "Invalid JSON request",
-                    },
-                }
-            else:
-                # Process request
-                response = await self._process_request(request)
+                # Process all complete lines (messages) in buffer
+                while b"\n" in buffer:
+                    line, _, remainder = buffer.partition(b"\n")
+                    buffer = bytearray(remainder)  # keep remainder (could be partial next msg)
+                    if not line:
+                        continue
+                    try:
+                        try:
+                            request = json.loads(line.decode("utf-8"))
+                        except json.JSONDecodeError:
+                            logger.error("Received invalid JSON request")
+                            response = {
+                                "status": "error",
+                                "error": {
+                                    "code": "invalid_json",
+                                    "message": "Invalid JSON request",
+                                },
+                            }
+                        else:
+                            response = await self._process_request(request, client_sock)
+                            # Update last activity after successful processing
+                            try:
+                                self.last_activity = asyncio.get_event_loop().time()
+                            except Exception:
+                                self.last_activity = time.time()
 
-            # Send response
-            response_data = json.dumps(response).encode("utf-8") + b"\n"
-            await loop.sock_sendall(client_sock, response_data)
-
+                        # If handler already streamed and sent final response, skip default send
+                        if not (isinstance(response, dict) and response.get("already_sent")):
+                            response_data = json.dumps(response).encode("utf-8") + b"\n"
+                            await loop.sock_sendall(client_sock, response_data)
+                    except asyncio.CancelledError:
+                        raise
+                    except Exception as e:
+                        logger.error(f"Error processing client message: {e}")
+                        # Send generic error then continue (don't drop connection unless severe)
+                        try:
+                            err_resp = json.dumps({
+                                "status": "error",
+                                "error": {"code": "handler_error", "message": str(e)},
+                            }).encode("utf-8") + b"\n"
+                            await loop.sock_sendall(client_sock, err_resp)
+                        except Exception:
+                            # If we can't send the error, close
+                            buffer.clear()
+                            break
         except asyncio.CancelledError:
             logger.debug("Client handler task cancelled")
-        except Exception as e:
-            logger.error(f"Error handling client: {e}")
         finally:
-            # Close client socket
             try:
                 client_sock.close()
             except Exception:
@@ -223,7 +250,7 @@ class ServiceServer:
 
     # HTTP handlers removed.
 
-    async def _process_request(self, request: Dict) -> Dict:
+    async def _process_request(self, request: Dict, client_sock=None) -> Dict:
         """
         Process a request from a client.
 
@@ -252,7 +279,11 @@ class ServiceServer:
             # Route request to appropriate handler
             if request_type in self.handlers:
                 handler = self.handlers[request_type]
-                result = await handler(request)
+                # Pass client_sock to handlers that accept it (like _handle_query for streaming)
+                try:
+                    result = await handler(request, client_sock)  # type: ignore[arg-type]
+                except TypeError:
+                    result = await handler(request)  # type: ignore[misc]
                 response.update(result)
             else:
                 response.update(
@@ -275,7 +306,7 @@ class ServiceServer:
 
         return response
 
-    async def _handle_query(self, request: Dict) -> Dict:
+    async def _handle_query(self, request: Dict, client_sock=None) -> Dict:
         """
         Handle a query request.
 
@@ -299,17 +330,110 @@ class ServiceServer:
             }
 
         try:
-            # Get context
+            # Get context (currently not deeply consumed by process_query; OK to prepare)
             context = await self.service.context_manager.get_context(
                 options.get("context", {})
             )
 
-            # Query LLM
-            response = await self.service.llm_client.query(
-                question=question, context=context, stream=options.get("stream", False)
+            # Prepare simple context lines from terminal history
+            context_lines = None
+            try:
+                th = (context or {}).get("terminal_history") or {}
+                recent = th.get("recent_commands") or []
+                if isinstance(recent, list) and recent:
+                    context_lines = [str(c) for c in recent]
+            except Exception:
+                context_lines = None
+
+            use_stream = bool(options.get("stream", False)) and client_sock is not None
+
+            # If streaming requested, set up a queue and sender to relay chunks
+            if use_stream:
+                import asyncio as _asyncio
+                loop = _asyncio.get_event_loop()
+                queue: _asyncio.Queue = _asyncio.Queue()
+
+                async def _sender():
+                    try:
+                        # Send stream_start
+                        start_msg = {
+                            "status": "success",
+                            "event": "stream_start",
+                            "request_id": request.get("id"),
+                            "timestamp": datetime.datetime.now().isoformat(),
+                        }
+                        await loop.sock_sendall(client_sock, (json.dumps(start_msg) + "\n").encode("utf-8"))
+                        while True:
+                            item = await queue.get()
+                            if item is None:
+                                break
+                            chunk_msg = {
+                                "status": "success",
+                                "event": "stream_chunk",
+                                "text": item,
+                                "request_id": request.get("id"),
+                            }
+                            await loop.sock_sendall(client_sock, (json.dumps(chunk_msg) + "\n").encode("utf-8"))
+                    except Exception as e:
+                        logger.error(f"Error sending stream chunk: {e}")
+
+                sender_task = _asyncio.create_task(_sender())
+
+                def _cb(text: str) -> None:
+                    try:
+                        queue.put_nowait(text)
+                    except Exception:
+                        pass
+
+                # Run process_query with streaming and our callback in executor
+                result = await loop.run_in_executor(
+                    None,
+                    lambda: self.service.llm_client.process_query(
+                        query=question,
+                        context_lines=context_lines,
+                        show_thinking=True,
+                        stream=True,
+                        stream_callback=_cb,
+                    ),
+                )
+
+                # Signal sender to finish and wait
+                try:
+                    queue.put_nowait(None)
+                except Exception:
+                    pass
+                try:
+                    await sender_task
+                except Exception:
+                    pass
+
+                # Send stream_end with final result
+                end_msg = {
+                    "status": "success",
+                    "event": "stream_end",
+                    "result": result,
+                    "request_id": request.get("id"),
+                    "timestamp": datetime.datetime.now().isoformat(),
+                }
+                await loop.sock_sendall(client_sock, (json.dumps(end_msg) + "\n").encode("utf-8"))
+
+                # Indicate that we've already sent the final response
+                return {"already_sent": True}
+
+            # Non-streaming path: delegate to synchronous process_query in a worker thread
+            import asyncio as _asyncio
+            loop = _asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: self.service.llm_client.process_query(
+                    query=question,
+                    context_lines=context_lines,
+                    show_thinking=True,
+                    stream=False,
+                ),
             )
 
-            return {"status": "success", "result": response}
+            return {"status": "success", "result": result}
         except Exception as e:
             logger.error(f"Error handling query: {e}")
             return {
@@ -347,17 +471,35 @@ class ServiceServer:
                 "error": {"code": "missing_control_command", "message": "No control command provided"},
             }
         if command == "restart":
-            # Perform async restart: stop then start fresh. Update service_id.
+            # Schedule restart asynchronously so we can reply before socket closes
             try:
-                await self.service.stop()
-                # Assign a new service_id to differentiate after restart
-                import uuid
+                import asyncio as _asyncio
 
-                self.service.service_id = str(uuid.uuid4())
-                await self.service.start()
-                return {"status": "success", "result": {"message": "Service restarted", "service_id": self.service.service_id}}
+                async def _restart_task():
+                    try:
+                        await self.service.stop()
+                        # Assign a new service_id to differentiate after restart
+                        import uuid as _uuid
+
+                        self.service.service_id = str(_uuid.uuid4())
+                        await self.service.start()
+                        logger.info("Service restarted successfully (ID: %s)", self.service.service_id)
+                    except Exception as e:
+                        logger.error(f"Failed to restart service asynchronously: {e}")
+
+                # give a tiny delay to ensure response is flushed to client first
+                async def _delayed_restart():
+                    try:
+                        await _asyncio.sleep(0.05)
+                    except Exception:
+                        pass
+                    await _restart_task()
+
+                _asyncio.create_task(_delayed_restart())
+
+                return {"status": "success", "result": {"message": "Service restart initiated"}}
             except Exception as e:
-                logger.error(f"Failed to restart service: {e}")
+                logger.error(f"Failed to schedule restart: {e}")
                 return {
                     "status": "error",
                     "error": {"code": "restart_failed", "message": str(e)},

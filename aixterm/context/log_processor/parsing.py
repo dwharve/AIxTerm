@@ -89,6 +89,33 @@ def extract_conversation_from_log(log_content: str) -> List[Dict[str, Any]]:
                     "$" + clean_line[dollar_pos + 6 :]
                 )  # Convert to standard format
 
+        # Also support fallback logging format used by TerminalContext:
+        # "$ User: <query>" followed later by "$ Assistant: <response>"
+        if clean_line.startswith("$ User:"):
+            # Save any ongoing AI response first
+            if current_ai_response and collecting_response:
+                ai_content = "\n".join(current_ai_response).strip()
+                if ai_content:
+                    messages.append({"role": "assistant", "content": ai_content})
+                current_ai_response = []
+                collecting_response = False
+
+            # Extract the user query after the colon
+            query_part = clean_line.split(":", 1)[1].strip()
+            if query_part:
+                messages.append({"role": "user", "content": query_part})
+                collecting_response = True
+            continue
+
+        if clean_line.startswith("$ Assistant:"):
+            # Assistant response in single line (fallback format)
+            resp_part = clean_line.split(":", 1)[1].strip()
+            if resp_part:
+                messages.append({"role": "assistant", "content": resp_part})
+                current_ai_response = []
+                collecting_response = False
+            continue
+
         if ai_command_match:
             # Save any ongoing AI response first
             if current_ai_response and collecting_response:

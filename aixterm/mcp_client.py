@@ -423,18 +423,40 @@ class MCPServer:
         if self.is_running():
             return
 
-        try:
+        def _do_start():
             # Create server parameters
             command = self.config["command"]
             args = self.config.get("args", [])
             env = self.config.get("env", {})
 
-            # Handle different command formats
+            # Normalize command representation.
+            # Acceptable user configs:
+            #   "python -m pythonium" (+ optional args)
+            #   ["python", "-m", "pythonium"]
+            # We must not treat a single string with spaces as the program path.
             if isinstance(command, str):
-                command = [command]
+                # Split on whitespace similar to shell tokenization (no quotes handling needed for simple patterns)
+                command = [c for c in command.strip().split() if c]
+            else:
+                # Defensive copy to avoid mutating original list
+                command = list(command)
 
+            # Extend with args if provided (args already list-like per validation)
             if args:
-                command.extend(args)
+                # If args is a string, split it too (defensive)
+                if isinstance(args, str):
+                    command.extend(a for a in args.strip().split() if a)
+                else:
+                    command.extend(args)
+
+            if not command:
+                raise MCPError("Empty command after normalization")
+
+            self.logger.debug(
+                "Starting MCP server with normalized command: %s | env keys: %s",
+                command,
+                list(env.keys()) if env else [],
+            )
 
             self._server_params = StdioServerParameters(
                 command=command[0],
@@ -454,9 +476,20 @@ class MCPServer:
             self._initialized = True
             self.logger.info("MCP server started successfully")
 
+        try:
+            _do_start()
         except Exception as e:
-            self.logger.error(f"Failed to start MCP server: {e}")
-            raise MCPError(f"Failed to start MCP server: {e}")
+            # Retry once on transient startup errors (e.g., connection closed during init)
+            msg = str(e).lower()
+            self.logger.warning(
+                f"MCP server start failed: {e}. Will retry once after short backoff"
+            )
+            try:
+                time.sleep(0.5)
+                _do_start()
+            except Exception as e2:
+                self.logger.error(f"Failed to start MCP server after retry: {e2}")
+                raise MCPError(f"Failed to start MCP server: {e2}")
 
     async def _initialize_session(self) -> None:
         """Initialize MCP session asynchronously."""

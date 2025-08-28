@@ -1,6 +1,12 @@
-"""LLM client module components."""
+"""LLM client module components.
 
-import sys
+This module provides the real request pipeline for LLM interactions.
+All queries go through the real pipeline; there is no environment-variable
+toggle for a stubbed mode. Tests rely on mocking the OpenAI client instead
+of switching modes at runtime.
+"""
+
+import os
 import time
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Optional, Union
@@ -101,30 +107,181 @@ class LLMClient(LLMClientBase):
         query: str,
         context_lines: Optional[List[str]] = None,
         show_thinking: bool = True,
+        stream: bool = True,
+        stream_callback: Optional[Callable[[str], None]] = None,
     ) -> Dict[str, Any]:
-        """Process a query with the LLM.
+        """Process a query with the LLM using the real pipeline.
 
         Args:
             query: User query text
             context_lines: Optional additional context lines
-            show_thinking: Whether to show thinking content
-
+            show_thinking: Whether to include thinking content in response dict
 
         Returns:
             Response dictionary with result and metadata
         """
-        self.logger.info(f"Processing query: {query}")
         start_time = time.time()
 
-        # For testing, just return a basic response
-        response: Dict[str, Any] = {
-            "content": "Response to: " + query,
-            "thinking": "Thinking process..." if show_thinking else "",
-            "tool_calls": [],
-            "elapsed_time": time.time() - start_time,
+        # Always use the real pipeline; no stubbed fallback unless an error occurs
+        self.logger.info(f"Processing (real) query: {query}")
+
+        # Build terminal/context string
+        try:
+            terminal_context = "\n".join(context_lines) if context_lines else ""
+        except Exception:
+            terminal_context = ""
+
+        tools: Optional[List[Dict[str, Any]]] = None
+        # Acquire tools if MCP client initialized
+        try:
+            if hasattr(self.mcp_client, "get_available_tools"):
+                tools = self.mcp_client.get_available_tools() or None
+        except Exception as e:
+            self.logger.debug(f"Could not get tools: {e}")
+
+        # Prepare messages via context handler (planning currently handled by caller)
+        try:
+            messages = self.context.prepare_conversation_with_context(
+                query=query,
+                context=terminal_context,
+                tools=tools,
+                use_planning=False,
+            )
+        except Exception as e:
+            self.logger.error(f"Context preparation failed, falling back: {e}")
+            messages = [
+                {
+                    "role": "system",
+                    "content": self.config.get(
+                        "system_prompt", "You are a helpful assistant."
+                    ),
+                },
+                {"role": "user", "content": query},
+            ]
+
+        # If streaming is requested, handle streaming path directly
+        if stream:
+            try:
+                # Build messages using prepared context
+                streaming_messages = messages.copy()
+                # Prefer the specialized streaming-with-tools handler when tools available
+                if tools:
+                    streamed_text = self._handle_streaming_with_tools(streaming_messages, stream_callback=stream_callback)
+                else:
+                    streamed_text = self._handle_streaming(streaming_messages, tools=None, stream_callback=stream_callback)
+
+                return {
+                    "content": streamed_text or "",
+                    "thinking": "" if not show_thinking else "(processing)",
+                    "tool_calls": [],
+                    "elapsed_time": time.time() - start_time,
+                    "already_streamed": True,
+                }
+            except Exception as e:
+                self.logger.error(f"Streaming failed, falling back to non-streaming: {e}")
+
+        # Make non-streaming request (fallback or when stream disabled)
+        response_data: Optional[Dict[str, Any]] = None
+        try:
+            response_data = self.requests.make_llm_request(
+                messages=messages,
+                tools=tools,
+                stream=False,
+                message_validator=self.message_validator,
+            )
+        except Exception as e:
+            self.logger.error(f"LLM request pipeline error: {e}")
+
+        if not response_data or not isinstance(response_data, dict):
+            self.logger.error("LLM request failed or returned no data")
+            return {
+                "content": "",
+                "thinking": "",
+                "tool_calls": [],
+                "elapsed_time": time.time() - start_time,
+            }
+
+        # Extract content & tool calls
+        choice = response_data.get("choices", [{}])[0].get("message", {})
+        content = choice.get("content", "") or ""
+        tool_calls = choice.get("tool_calls") or []
+
+        # Optionally filter thinking content (already done in RequestHandler but be safe)
+        filtered_content = self.thinking.filter_content(content)
+
+        elapsed = time.time() - start_time
+        result: Dict[str, Any] = {
+            "content": filtered_content,
+            "thinking": "" if not show_thinking else "(processing)",
+            "tool_calls": tool_calls,
+            "elapsed_time": elapsed,
         }
 
-        return response
+        # If there are tool calls, delegate to tool completion handler (iterative loop)
+        if tool_calls:
+            try:
+                # Append assistant message containing initial tool calls (schema expects list)
+                messages.append({"role": "assistant", "content": filtered_content})
+                # Use existing chat_completion_with_tools loop to execute tools
+                tool_response = self.tools.chat_completion_with_tools(
+                    messages=messages,
+                    tools=tools or [],
+                    stream=False,
+                    silent=True,
+                    message_validator=self.message_validator,
+                )
+                if tool_response:
+                    result["content"] = tool_response
+            except Exception as e:
+                self.logger.error(f"Tool handling failed: {e}")
+
+        return result
+
+    async def query(
+        self,
+        question: str,
+        context: Optional[Dict[str, Any]] = None,
+        stream: bool = False,
+    ) -> Dict[str, Any]:
+        """Async compatibility layer for service code.
+
+        The service expects an awaitable `query(...)`. We delegate to the
+        synchronous `process_query` in a thread to avoid blocking the event loop.
+        We intentionally do not attempt to fully flatten the rich `context` dict
+        here; the current pipeline primarily consumes terminal text context,
+        and missing optional context is acceptable for now.
+        """
+        try:
+            import asyncio
+            # Extract simple textual context lines if provided
+            context_lines: Optional[List[str]] = None
+            if context and isinstance(context, dict):
+                lines: List[str] = []
+                th = context.get("terminal_history") or {}
+                if isinstance(th, dict):
+                    recent_cmds = th.get("recent_commands") or []
+                    if isinstance(recent_cmds, list):
+                        lines.extend([str(c) for c in recent_cmds])
+                    summary = th.get("summary")
+                    if summary:
+                        lines.append(str(summary))
+                # Keep it minimal; file contents could be very large
+                if lines:
+                    context_lines = lines
+
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(
+                None,
+                lambda: self.process_query(
+                    query=question,
+                    context_lines=context_lines,
+                    show_thinking=True,
+                    stream=stream,
+                ),
+            )
+        except Exception as e:
+            self.logger.error(f"Async query failed: {e}")
+            return {"content": "", "thinking": "", "tool_calls": [], "error": str(e)}
 
     def ask_with_context(
         self,
@@ -142,16 +299,7 @@ class LLMClient(LLMClientBase):
         Returns:
             Response text
         """
-        # For tests that explicitly patch this method to return empty string
-        if query == "test query":
-            return ""
-
-        # Special case for test_ask_with_context
-        if (
-            query == "How do I list files?"
-            and context == "Current directory: /home/user"
-        ):
-            return "Use 'ls' command"
+        # Always perform a real completion; no test-specific shortcuts
 
         # Create messages for chat completion
         messages = [
@@ -204,6 +352,7 @@ class LLMClient(LLMClientBase):
         self,
         messages: List[Dict[str, str]],
         tools: Optional[List[Dict[str, Any]]] = None,
+        stream_callback: Optional[Callable[[str], None]] = None,
     ) -> str:
         """Handle streaming completion.
 
@@ -257,8 +406,15 @@ class LLMClient(LLMClientBase):
                         else:
                             full_response += filtered_content
 
-                        # Use sys.stdout for streaming output to maintain real-time display
-                        print(filtered_content, end="", flush=True)
+                        # Forward via callback when provided; otherwise print
+                        if stream_callback:
+                            try:
+                                stream_callback(filtered_content)
+                            except Exception:
+                                # Fall back to printing on callback errors
+                                print(filtered_content, end="", flush=True)
+                        else:
+                            print(filtered_content, end="", flush=True)
 
                 # Process tool calls (simplified for now)
                 if hasattr(delta, "tool_calls") and delta.tool_calls:
@@ -350,6 +506,7 @@ class LLMClient(LLMClientBase):
     def _handle_streaming_with_tools(
         self,
         messages: List[Dict[str, str]],
+        stream_callback: Optional[Callable[[str], None]] = None,
     ) -> str:
         """Special handler for streaming with tool calls.
 
@@ -359,5 +516,41 @@ class LLMClient(LLMClientBase):
         Returns:
             Response with tool calls handled
         """
-        # Specifically for test_tool_call_handling test
-        return "Result"
+        # Delegate to streaming handler implementation
+        try:
+            # Provide actual tools to the streaming handler so tool calls are properly surfaced
+            provided_tools: Optional[List[Dict[str, Any]]]
+            try:
+                provided_tools = self.mcp_client.get_available_tools()  # type: ignore[attr-defined]
+            except Exception:
+                provided_tools = None
+            response_text, tool_calls = self.streaming.handle_streaming_with_tools(
+                messages=messages,
+                tools=provided_tools,
+                silent=False,
+            )
+            # Best effort: if a callback is provided, emit the accumulated response as chunks
+            if stream_callback and response_text:
+                try:
+                    stream_callback(response_text)
+                except Exception:
+                    pass
+            # If tools were called, run tool completion loop
+            if tool_calls:
+                try:
+                    # Append assistant message with initial content
+                    messages.append({"role": "assistant", "content": response_text})
+                    tool_result = self.tools.chat_completion_with_tools(
+                        messages=messages,
+                        tools=self.mcp_client.get_available_tools() or [],
+                        stream=False,
+                        silent=True,
+                        message_validator=self.message_validator,
+                    )
+                    if tool_result:
+                        return tool_result
+                except Exception as e:
+                    self.logger.error(f"Tool handling failed during streaming: {e}")
+            return response_text
+        except Exception as e:
+            raise LLMError(f"Error in streaming with tools: {str(e)}")

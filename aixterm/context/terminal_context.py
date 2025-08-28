@@ -333,6 +333,22 @@ class TerminalContext:
         """
         return self.log_processor.clear_session_context()
 
+    def clear_context(self) -> None:
+        """Clear current terminal session context.
+
+        This method aligns with the interface expected by callers like
+        `StatusManager.clear_context()` by providing a no-return method that
+        performs context clearing and logs the outcome.
+        """
+        try:
+            cleared = self.log_processor.clear_session_context()
+            if cleared:
+                self.logger.debug("Session context cleared")
+            else:
+                self.logger.debug("No session context found to clear")
+        except Exception as e:
+            self.logger.error(f"Error clearing session context: {e}")
+
     def update_context(self, query: str, force_collect: bool = True) -> None:
         """Update context with new query information.
 
@@ -388,7 +404,7 @@ class TerminalContext:
         """
         import time
 
-        stats = {}
+        stats: Dict[str, Any] = {}
 
         # Log processor stats
         try:
@@ -396,20 +412,60 @@ class TerminalContext:
             if log_path and log_path.exists():
                 log_size = log_path.stat().st_size
                 log_modified = log_path.stat().st_mtime
+                last_updated_str = time.ctime(log_modified)
+
+                # Read a tail of the log for metrics
+                try:
+                    with open(log_path, "r", encoding="utf-8", errors="ignore") as f:
+                        f.seek(0, 2)
+                        file_size = f.tell()
+                        read_size = min(file_size, 50000)
+                        f.seek(file_size - read_size)
+                        log_tail = f.read()
+                except Exception:
+                    log_tail = ""
+
+                # Compute history count
+                try:
+                    from ..context.log_processor.parsing import (
+                        extract_conversation_from_log,
+                    )
+
+                    history_msgs = extract_conversation_from_log(log_tail)
+                    history_count = len(history_msgs)
+                except Exception:
+                    history_count = 0
+
+                # Compute token count approximately
+                try:
+                    token_count = self.token_manager.estimate_tokens(log_tail)
+                except Exception:
+                    token_count = 0
+
                 stats["log_info"] = {
                     "log_file": str(log_path),
                     "log_size": f"{log_size / 1024:.1f} KB",
-                    "last_modified": time.ctime(log_modified),
+                    "last_modified": last_updated_str,
                 }
+                # Top-level fields used by StatusManager
+                stats["token_count"] = token_count
+                stats["history_count"] = history_count
+                stats["last_updated"] = last_updated_str
             else:
                 stats["log_info"] = {
                     "log_file": "None",
                     "log_size": "N/A",
                     "last_modified": "N/A",
                 }
+                stats["token_count"] = 0
+                stats["history_count"] = 0
+                stats["last_updated"] = "never"
         except Exception as e:
             self.logger.error(f"Error getting log stats: {e}")
             stats["log_info"] = {"error": str(e)}
+            stats["token_count"] = 0
+            stats["history_count"] = 0
+            stats["last_updated"] = "never"
 
         # Token management stats
         try:

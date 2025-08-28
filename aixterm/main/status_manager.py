@@ -1,8 +1,5 @@
 """Status reporting and maintenance functionality for AIxTerm."""
-
-import os
-import platform
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from aixterm.utils import get_logger
 
@@ -33,8 +30,7 @@ class StatusManager:
         self.logger.info("Showing status information (concise format)")
 
         summary = self._collect_status_summary()
-
-        # Header kept for backwards compatibility with tests looking for it
+        # Header
         self.display_manager.show_info("AIxTerm Status")
 
         # Core runtime
@@ -63,7 +59,7 @@ class StatusManager:
             )
         )
 
-        # Context + cleanup
+        # Context
         context = summary.get("context", {})
         self.display_manager.show_info(
             "Context: tokens={tokens} history={history} last_update={last}".format(
@@ -73,9 +69,9 @@ class StatusManager:
             )
         )
 
+        # Cleanup summary
         cleanup = summary.get("cleanup", {})
-        # Emit legacy header expected by tests plus concise summary line
-        self.display_manager.show_info("\nCleanup Status:")
+        self.display_manager.show_info("Cleanup Status:")
         self.display_manager.show_info(
             "Cleanup: last={last} next={next} items={items} freed={freed}".format(
                 last=cleanup.get("last_cleanup"),
@@ -90,7 +86,7 @@ class StatusManager:
         if log_path:
             self.display_manager.show_info(f"TTY Log: {log_path}")
 
-        # Plugin summary (if available later we can enrich)
+        # Plugin summary
         plugins = summary.get("plugins", {})
         if plugins:
             self.display_manager.show_info(
@@ -135,7 +131,7 @@ class StatusManager:
 
         # Shell integrations
         shell_info: Dict[str, Dict[str, Any]] = {}
-        try:
+        try:  # type: ignore[import-not-found]
             from .shell_integration import ShellIntegrationManager  # local import
 
             shell_mgr = ShellIntegrationManager(self.app)
@@ -144,37 +140,52 @@ class StatusManager:
             pass
 
         # Services (server + LLM)
-        services = {}
+        services: Dict[str, Any] = {}
         try:
-            # Attempt to query server status via client if available
             from aixterm.client.client import AIxTermClient  # lightweight import
 
             client = AIxTermClient(config_path=str(self.config.config_path))
             try:
                 srv = client.status()
+                # Server status reflects the transport call result
                 services["server"] = srv.get("status", "unknown")
-                services["llm_api"] = (
-                    "ok" if srv.get("llm_api", {}).get("reachable") else "error"
-                )
+
+                # Service payload is under 'result'
+                result = srv.get("result", {}) or {}
+
+                # Prefer server-reported LLM status when available
+                llm_info = result.get("llm_api") or {}
+                if isinstance(llm_info, dict) and "reachable" in llm_info:
+                    services["llm_api"] = "ok" if llm_info.get("reachable") else "error"
+                else:
+                    # Fallback: infer from configuration (API key presence)
+                    try:
+                        key = getattr(self.config, "get_openai_key", lambda: None)()
+                        services["llm_api"] = "ok" if key else "unknown"
+                    except Exception:
+                        services["llm_api"] = "unknown"
             except Exception:  # pragma: no cover
                 services["server"] = "unreachable"
+                # Keep llm_api unknown in this case
+                services.setdefault("llm_api", "unknown")
         except Exception:  # pragma: no cover
-            services["server"] = services.get("server", "unknown")
+            if "server" not in services:
+                services["server"] = "unknown"
+            services.setdefault("llm_api", "unknown")
 
         # Active log (placeholder - will be updated when log path refactor lands)
-        logs: Dict[str, Optional[str]] = {"active_log": None}
+        logs: Dict[str, str | None] = {"active_log": None}
         try:
-            # Try to locate current tty log via context manager (if has attribute)
             if hasattr(self.context_manager, "log_processor"):
                 lp = getattr(self.context_manager, "log_processor")
                 if hasattr(lp, "find_log_file"):
-                    log_path = lp.find_log_file(use_current_tty=True)
+                    log_path = lp.find_log_file()
                     if log_path:
                         logs["active_log"] = str(log_path)
         except Exception:  # pragma: no cover
             pass
 
-        # Plugin summary (minimal; expanded later if plugin manager exposes stats)
+        # Plugin summary
         plugins: Dict[str, Any] = {}
         try:
             if hasattr(self.app, "plugin_manager"):
@@ -239,16 +250,22 @@ class StatusManager:
             self.logger.error(f"Error during cleanup: {e}")
             self.display_manager.show_error(f"Error during cleanup: {e}")
 
-    def clear_context(self) -> None:
-        """Clear current context."""
+    def clear_context(self, suppress_output: bool = False) -> None:
+        """Clear current context.
+
+        Args:
+            suppress_output: When True, do not print success/info messages. Errors are still logged.
+        """
         self.logger.info("Clearing context")
 
         try:
             # Clear context
             self.context_manager.clear_context()
-            self.display_manager.show_success("Context cleared.")
+            if not suppress_output:
+                self.display_manager.show_success("Context cleared.")
         except Exception as e:
             self.logger.error(f"Error clearing context: {e}")
+            # Show error regardless to surface failure to users
             self.display_manager.show_error(f"Error clearing context: {e}")
 
     def init_config(self, force: bool = False) -> None:

@@ -115,11 +115,68 @@ class ContextHandler:
         except Exception as e:
             self.logger.warning(f"Could not get conversation history: {e}")
 
-        # Add current query with context
+        # Add current query with context and enriched stats
+        enriched_context = context
+        try:
+            # Attach terminal context stats to help the model answer meta-context questions
+            stats = context_manager_terminal.get_context_stats()  # type: ignore[name-defined]
+            # Prefer session-level metrics for commands and token usage
+            session_ctx = None
+            try:
+                session_ctx = context_manager_terminal.log_processor.get_session_context(
+                    token_budget=self.config.get_available_context_size(),
+                    model_name=self.config.get("model", ""),
+                )
+            except Exception:
+                session_ctx = None
+
+            if isinstance(stats, dict):
+                parts = []
+                # Conversation history (messages) count
+                history_count = stats.get("history_count")
+                # Session metrics
+                command_count = (
+                    session_ctx.get("command_count") if isinstance(session_ctx, dict) else None
+                )
+                error_count = (
+                    session_ctx.get("error_count") if isinstance(session_ctx, dict) else None
+                )
+                session_tokens = (
+                    session_ctx.get("tokens") if isinstance(session_ctx, dict) else None
+                )
+                last_updated = stats.get("last_updated")
+                if command_count is not None:
+                    parts.append(f"command_count: {command_count}")
+                if error_count is not None:
+                    parts.append(f"error_count: {error_count}")
+                if history_count is not None:
+                    parts.append(f"message_history_count: {history_count}")
+                # Prefer session tokens over raw token_count for clarity
+                if session_tokens is not None:
+                    parts.append(f"tokens: {session_tokens}")
+                else:
+                    token_count = stats.get("token_count")
+                    if token_count is not None:
+                        parts.append(f"tokens: {token_count}")
+                if last_updated:
+                    parts.append(f"last_updated: {last_updated}")
+                # Include log file path when available
+                log_info = stats.get("log_info") or {}
+                if isinstance(log_info, dict) and log_info.get("log_file"):
+                    parts.append(f"log_file: {log_info.get('log_file')}")
+                if parts:
+                    stats_text = "\n".join(parts)
+                    enriched_context = (
+                        f"{context}\n\nContext Stats:\n{stats_text}" if context else f"Context Stats:\n{stats_text}"
+                    )
+        except Exception:
+            # Non-fatal; proceed without stats
+            enriched_context = context
+
         messages.append(
             {
                 "role": "user",
-                "content": f"{query}\n\nContext:\n{context}\n----",
+                "content": f"{query}\n\nContext:\n{enriched_context}\n----",
             }
         )
 

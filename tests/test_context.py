@@ -406,7 +406,6 @@ test
         result = context_manager.token_manager.apply_token_limit(
             long_text, 50, "gpt-3.5-turbo"
         )
-
         # Should be shorter than the original
         assert len(result) < len(long_text)
 
@@ -420,25 +419,28 @@ class TestAdvancedTerminalContext:
         log_file = tmp_path / ".aixterm" / "tty" / "default.log"
         log_file.parent.mkdir(parents=True, exist_ok=True)
         log_file.write_text("$ echo hello\nhello\n$ ls\nfile1.txt\nfile2.txt")
-        with patch.object(context_manager.log_processor, "find_log_file", return_value=log_file):
+        with patch.object(
+            context_manager.log_processor, "find_log_file", return_value=log_file
+        ):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_terminal_context(smart_summarize=True)
-        
+
         assert str(tmp_path) in result
         assert "Recent commands:" in result or "echo hello" in result
 
-    def test_get_terminal_context_without_smart_features(
-        self, context_manager, tmp_path
-    ):
+    def test_get_terminal_context_without_smart_features(self, context_manager, tmp_path):
         """Test terminal context with smart features disabled."""
         log_file = tmp_path / ".aixterm" / "tty" / "default.log"
         log_file.parent.mkdir(parents=True, exist_ok=True)
         log_file.write_text("$ echo hello\nhello")
-        with patch.object(context_manager.log_processor, "find_log_file", return_value=log_file):
+        with patch.object(
+            context_manager.log_processor, "find_log_file", return_value=log_file
+        ):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_terminal_context(smart_summarize=False)
 
         assert str(tmp_path) in result
+        # Ensure summarization disabled path still returns raw content context
         # Should use the old truncation method
         assert "echo hello" in result
 
@@ -452,7 +454,9 @@ class TestOptimizedContext:
         log_file = tmp_path / ".aixterm" / "tty" / "default.log"
         log_file.parent.mkdir(parents=True, exist_ok=True)
         log_file.write_text("$ echo hello\nhello\n$ ls\nfile1.txt\nfile2.txt")
-        with patch.object(context_manager.log_processor, "find_log_file", return_value=log_file):
+        with patch.object(
+            context_manager.log_processor, "find_log_file", return_value=log_file
+        ):
             with patch("os.getcwd", return_value=str(tmp_path)):
                 result = context_manager.get_optimized_context(query="test query")
 

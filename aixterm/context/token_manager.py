@@ -2,7 +2,11 @@
 
 from typing import Any, Optional
 
-import tiktoken
+# tiktoken is optional at runtime; provide graceful fallbacks when unavailable
+try:  # pragma: no cover - exercised via integration, not unit tests
+    import tiktoken  # type: ignore
+except Exception:  # pragma: no cover - fallback path
+    tiktoken = None  # type: ignore
 
 
 class TokenManager:
@@ -32,11 +36,15 @@ class TokenManager:
 
         model_name = self.config.get("model", "")
 
+        # If tiktoken is unavailable, use a simple heuristic (~4 chars per token)
+        if not tiktoken:
+            return max(1, len(text) // 4)
+
         # Get appropriate tokenizer
         if model_name and model_name.startswith(("gpt-", "text-")):
             try:
                 encoder = tiktoken.encoding_for_model(model_name)
-            except KeyError:
+            except Exception:
                 encoder = tiktoken.get_encoding("cl100k_base")
         else:
             encoder = tiktoken.get_encoding("cl100k_base")
@@ -57,11 +65,17 @@ class TokenManager:
         if not text.strip():
             return text
 
+        # If tiktoken is unavailable, approximate by characters (keep tail for recency)
+        if not tiktoken:
+            approx_chars_per_token = 4
+            keep_chars = max_tokens * approx_chars_per_token
+            return text[-keep_chars:]
+
         # Get appropriate encoder
         if model_name and model_name.startswith(("gpt-", "text-")):
             try:
                 encoder = tiktoken.encoding_for_model(model_name)
-            except KeyError:
+            except Exception:
                 encoder = tiktoken.get_encoding("cl100k_base")
         else:
             encoder = tiktoken.get_encoding("cl100k_base")
@@ -120,10 +134,12 @@ class TokenManager:
             model_name = self.config.get("model", "gpt-3.5-turbo")
 
         try:
+            if not tiktoken:
+                raise RuntimeError("tiktoken unavailable")
             if model_name and model_name.startswith(("gpt-", "text-")):
                 try:
                     encoding = tiktoken.encoding_for_model(model_name)
-                except KeyError:
+                except Exception:
                     encoding = tiktoken.get_encoding("cl100k_base")
             else:
                 encoding = tiktoken.get_encoding("cl100k_base")
@@ -133,7 +149,7 @@ class TokenManager:
                 len(str(msg.get("content", ""))) + len(str(msg.get("role", "")))
                 for msg in messages
             )
-            return total_chars // 3
+            return max(1, total_chars // 4)
 
         total_tokens = 0
 

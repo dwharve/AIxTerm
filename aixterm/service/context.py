@@ -81,13 +81,76 @@ class ContextManager:
         Returns:
             A dictionary containing terminal history information.
         """
-        # This is a placeholder for the terminal history context
-        # In a real implementation, this would read from log files or session history
-        return {
-            "recent_commands": [],
-            "recent_output": "",
-            "summary": "No terminal history available",
-        }
+        try:
+            # Import lazily to avoid circular deps at service init time
+            from ..context.terminal_context import TerminalContext
+            from ..context.log_processor.processor import LogProcessor
+            from ..context.log_processor.tokenization import read_and_truncate_log
+            from ..context.log_processor.parsing import extract_commands_from_log
+
+            # Build helpers
+            term_ctx = TerminalContext(self.service.config)
+            log_proc = LogProcessor(self.service.config, logger)
+
+            # Locate active log file
+            log_file = log_proc.find_log_file()
+            if not log_file or not log_file.exists():
+                return {
+                    "recent_commands": [],
+                    "recent_output": "",
+                    "summary": "No terminal history available",
+                }
+
+            # Token budget for safe truncation
+            model_name = self.service.config.get("model", "")
+            token_budget = self.service.config.get_available_context_size()
+
+            # Read a truncated tail of the log for parsing
+            log_tail = read_and_truncate_log(log_file, token_budget, model_name)
+            if not log_tail:
+                return {
+                    "recent_commands": [],
+                    "recent_output": "",
+                    "summary": "No terminal history available",
+                }
+
+            # Extract commands and errors
+            commands, errors = extract_commands_from_log(log_tail)
+
+            # Compose recent commands list (just the command strings)
+            max_recent = 20
+            recent_commands = [cmd for (cmd, _out) in commands[-max_recent:]]
+
+            # Compose recent output (from the last command if present)
+            recent_output = ""
+            if commands:
+                try:
+                    last_cmd, last_out = commands[-1]
+                    # Keep output concise
+                    recent_output = (last_out or "").strip()[:2000]
+                except Exception:
+                    recent_output = ""
+
+            # Build a summary using the higher-level API for consistency
+            session = term_ctx.log_processor.get_session_context(
+                token_budget=token_budget, model_name=model_name
+            )
+            summary = session.get("summary") if isinstance(session, dict) else None
+            if not summary:
+                summary = "Recent terminal activity available."
+
+            return {
+                "recent_commands": recent_commands,
+                "recent_output": recent_output,
+                "summary": summary,
+            }
+        except Exception as e:
+            logger.error(f"Error retrieving terminal history: {e}")
+            return {
+                "recent_commands": [],
+                "recent_output": "",
+                "summary": "No terminal history available",
+            }
 
     async def _get_file_context(self, files: List[str]) -> Dict[str, Any]:
         """

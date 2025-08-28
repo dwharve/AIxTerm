@@ -13,6 +13,7 @@ import signal
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
+import os
 
 from ..config import AIxTermConfig
 
@@ -54,6 +55,10 @@ class AIxTermService:
         self.server: Optional["ServiceServer"] = None
         self.context_manager: Optional["ContextManager"] = None
         self.llm_client: Optional["LLMClient"] = None
+        # Persist MCP client across queries so MCP-managed servers (e.g. pythonium)
+        # are not torn down after a single request like in ephemeral CLI mode.
+        # Forward-declared; actual import at start() so annotation as Any to avoid name error
+        self.mcp_client: Optional[Any] = None
 
         # Service state
         self._running: bool = False
@@ -110,8 +115,18 @@ class AIxTermService:
             # For LLM client, we'll need MCP client too
             from ..mcp_client import MCPClient
 
-            mcp_client = MCPClient(self.config)
-            self.llm_client = LLMClient(self.config, mcp_client)
+            self.mcp_client = MCPClient(self.config)
+            self.llm_client = LLMClient(self.config, self.mcp_client)
+
+            # Initialize MCP servers immediately in service mode so they persist
+            # for subsequent client requests. This avoids stdio server teardown
+            # that happens when the short-lived CLI process exits.
+            try:
+                if self.config.get("mcp_servers", []):
+                    self.mcp_client.initialize()
+                    logger.debug("Initialized MCP servers at service startup")
+            except Exception as e:
+                logger.error(f"Failed to initialize MCP servers at startup: {e}")
 
             # Start components
             logger.debug("LLM client initialized")
@@ -121,11 +136,22 @@ class AIxTermService:
 
             logger.debug("Starting server")
             await self.server.start()
+            # Reset last_activity post-start to avoid counting initialization time
+            try:
+                import asyncio as _asyncio
+                if self.server:
+                    self.server.last_activity = _asyncio.get_event_loop().time()
+            except Exception:
+                pass
 
             logger.info(f"AIxTerm service started successfully (ID: {self.service_id})")
 
             # Setup signal handlers for graceful shutdown
             self._setup_signal_handlers()
+
+            # In test/ephemeral environments (detected via PYTEST_CURRENT_TEST or temp runtime dir), add idle shutdown
+            if os.environ.get("PYTEST_CURRENT_TEST"):
+                asyncio.create_task(self._idle_shutdown_monitor())
 
         except Exception as e:
             logger.error(f"Failed to start AIxTerm service: {e}")
@@ -159,11 +185,65 @@ class AIxTermService:
                 logger.debug("Shutting down LLM client")
                 # LLMClient has no async shutdown method
 
+            # Ensure MCP client and any managed MCP servers are shut down cleanly
+            if self.mcp_client:
+                try:
+                    logger.debug("Shutting down MCP client and servers")
+                    self.mcp_client.shutdown()
+                except Exception as e:
+                    logger.debug(f"Error during MCP client shutdown: {e}")
+
             logger.info("AIxTerm service stopped successfully")
 
         except Exception as e:
             logger.error(f"Error during service shutdown: {e}")
             raise
+
+    async def _idle_shutdown_monitor(self):
+        """Background task to auto-shutdown the service after a short idle period during tests.
+
+        This prevents orphaned processes when the pytest session finishes before
+        auto-started background services exit. Only active in test mode.
+        """
+        try:
+            # Allow override of idle window for tests via env var (bounded 0.05s..10s)
+            try:
+                idle_limit_env = float(os.environ.get("AIXTERM_TEST_IDLE_LIMIT", "2.0"))
+            except ValueError:
+                idle_limit_env = 2.0
+            idle_limit = max(0.05, min(idle_limit_env, 10.0))
+            # Startup grace window to ensure the service has time to finish initialization
+            # before the idle monitor can trigger. This prevents very small idle limits
+            # (e.g. 0.2s) from shutting down the service before the client connects.
+            try:
+                grace_env = float(os.environ.get("AIXTERM_TEST_IDLE_GRACE", "0.4"))
+            except ValueError:
+                grace_env = 0.4
+            grace_period = max(0.1, min(grace_env, 5.0))
+            # Check interval scales with idle limit for responsiveness while avoiding busy loop
+            check_interval = min(idle_limit / 2.0, 0.5)
+            from .server import ServiceServer  # local import to avoid cycle at module load
+            loop = asyncio.get_event_loop()
+            start_time = loop.time()
+            while self._running and os.environ.get("PYTEST_CURRENT_TEST"):
+                await asyncio.sleep(check_interval)
+                # If server exists and last activity is older than idle_limit, shutdown
+                server = self.server
+                if not server or not isinstance(server, ServiceServer):
+                    continue
+                last = getattr(server, "last_activity", None)
+                if last is None:
+                    continue
+                now = loop.time()
+                # Enforce startup grace period
+                if (now - start_time) < grace_period:
+                    continue
+                if (now - last) > idle_limit:
+                    logger.info("Idle shutdown monitor: no activity for %.2fs, stopping service", idle_limit)
+                    await self.stop()
+                    break
+        except Exception as e:
+            logger.debug(f"Idle shutdown monitor terminated: {e}")
 
     def status(self) -> Dict[str, Any]:
         """
@@ -187,6 +267,14 @@ class AIxTermService:
 
         if self.server:
             status_info["server"] = self.server.get_status()
+
+        # Add MCP server status if MCP client initialized
+        if self.mcp_client:
+            try:
+                status_info["mcp_servers"] = self.mcp_client.get_server_status()
+            except Exception as e:
+                # Don't fail overall status due to MCP introspection problems
+                logger.debug(f"Unable to collect MCP server status: {e}")
 
         return status_info
 

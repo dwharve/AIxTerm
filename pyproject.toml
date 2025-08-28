@@ -14,7 +14,7 @@ known_first_party = ["aixterm"]
 
 [project]
 name = "aixterm"
-version = "0.1.4"
+version = "0.2.1"
 authors = [
     {name = "David Harvey", email = "dwh.exis@gmail.com"}
 ]

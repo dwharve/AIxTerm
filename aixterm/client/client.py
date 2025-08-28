@@ -189,17 +189,77 @@ class AIxTermClient:
             request_data = json.dumps(request).encode("utf-8") + b"\n"
             if not self.connection:
                 return {"status": "error", "error": {"code": "not_connected", "message": "Not connected"}}
-            self.connection.sendall(request_data)
-            response_data = b""
-            while True:
-                chunk = self.connection.recv(4096)
-                if not chunk:
-                    break
-                response_data += chunk
-                if b"\n" in response_data:
-                    break
-            response_text = response_data.decode("utf-8")
-            return json.loads(response_text)
+            # Temporarily increase timeout for request/response to accommodate LLM latency
+            old_timeout = None
+            try:
+                old_timeout = self.connection.gettimeout()
+            except Exception:
+                pass
+            try:
+                self.connection.settimeout(60.0)
+            except Exception:
+                pass
+            try:
+                self.connection.sendall(request_data)
+                # If this is a streaming query, consume event stream
+                is_streaming = (
+                    request.get("type") == "query"
+                    and isinstance(request.get("payload"), dict)
+                    and isinstance(request["payload"].get("options"), dict)
+                    and bool(request["payload"]["options"].get("stream"))
+                )
+                if is_streaming:
+                    buffer = b""
+                    final_result: Dict[str, Any] = {}
+                    while True:
+                        chunk = self.connection.recv(4096)
+                        if not chunk:
+                            break
+                        buffer += chunk
+                        while b"\n" in buffer:
+                            line, _, buffer = buffer.partition(b"\n")
+                            if not line:
+                                continue
+                            try:
+                                evt = json.loads(line.decode("utf-8"))
+                            except Exception:
+                                continue
+                            event_type = evt.get("event")
+                            if event_type == "stream_start":
+                                continue
+                            if event_type == "stream_chunk":
+                                text = evt.get("text", "")
+                                if text:
+                                    # print chunk live
+                                    print(text, end="", flush=True)
+                                continue
+                            if event_type == "stream_end":
+                                final_result = evt.get("result", {}) or {}
+                                # ensure newline after stream
+                                print()
+                                return {"status": "success", "result": final_result, "already_streamed": True}
+                            # Fallback: if we got a non-event success, return it
+                            if evt.get("status") in ("success", "error") and not event_type:
+                                return evt
+                    # If stream ended unexpectedly
+                    return {"status": "error", "error": {"code": "stream_ended", "message": "Connection closed during stream"}}
+                else:
+                    response_data = b""
+                    while True:
+                        chunk = self.connection.recv(4096)
+                        if not chunk:
+                            break
+                        response_data += chunk
+                        if b"\n" in response_data:
+                            break
+                    response_text = response_data.decode("utf-8")
+                    return json.loads(response_text)
+            finally:
+                try:
+                    # Restore original timeout
+                    self.connection.settimeout(old_timeout)
+                except Exception:
+                    pass
         except Exception as e:
             logger.error("Error sending request: %s", e)
             self.connected = False
@@ -209,6 +269,93 @@ class AIxTermClient:
     def _get_timestamp(self) -> str:
         import datetime
         return datetime.datetime.now().isoformat()
+
+    # -------- Full process restart utilities --------
+    def _find_service_pids(self) -> list[int]:
+        """Best-effort find running AIxTerm service PIDs.
+
+        We search process command lines for the module invocation
+        "-m aixterm.service.service". This is scoped to the current user.
+        """
+        pids: list[int] = []
+        try:
+            import subprocess
+            # Limit to current user for safety
+            cmd = "ps -u $(id -u) -o pid=,args="
+            out = subprocess.check_output(cmd, shell=True, text=True, stderr=subprocess.DEVNULL)
+            for line in out.splitlines():
+                try:
+                    pid_str, args = line.strip().split(maxsplit=1)
+                    if "-m aixterm.service.service" in args:
+                        pids.append(int(pid_str))
+                except Exception:
+                    continue
+        except Exception:
+            pass
+        return pids
+
+    def _terminate_pids(self, pids: list[int], timeout: float = 2.0) -> None:
+        """Terminate PIDs with SIGTERM, escalate to SIGKILL after timeout."""
+        import signal
+        import time as _time
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                continue
+            except Exception:
+                continue
+        deadline = _time.time() + timeout
+        while _time.time() < deadline:
+            alive = [pid for pid in pids if self._pid_exists(pid)]
+            if not alive:
+                break
+            _time.sleep(0.05)
+        # Escalate remaining
+        for pid in [pid for pid in pids if self._pid_exists(pid)]:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except Exception:
+                pass
+
+    def _pid_exists(self, pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+            return True
+        except ProcessLookupError:
+            return False
+        except Exception:
+            return True
+
+    def full_restart(self) -> Dict[str, Any]:
+        """Perform a complete service restart by stopping the process and spawning a new one."""
+        import platform as _platform
+        # On Windows fallback to control-restart
+        if _platform.system() == "Windows":
+            return self.control("restart")
+
+        # Terminate existing service processes
+        pids = self._find_service_pids()
+        if pids:
+            self._terminate_pids(pids)
+        # Wait for socket node to disappear
+        try:
+            spath = Path(self.socket_path)
+            deadline = time.time() + 2.0
+            while time.time() < deadline and spath.exists():
+                time.sleep(0.05)
+        except Exception:
+            pass
+
+        # Start new service process
+        try:
+            self._ensure_server()
+            # Attempt connection
+            if self.connect():
+                return {"status": "success", "result": {"message": "Service fully restarted"}}
+            return {"status": "error", "error": {"code": "restart_failed", "message": "Service did not start"}}
+        except Exception as e:
+            return {"status": "error", "error": {"code": "restart_failed", "message": str(e)}}
 
     def __enter__(self):
         self.connect()
@@ -238,11 +385,25 @@ class AIxTermClient:
                 str(get_config_file()),
             ]
             try:
+                # Propagate minimal environment; ensure pytest marker retained if present so
+                # idle shutdown monitor activates under tests. Some CI or isolated test
+                # environments may not automatically propagate PYTEST_CURRENT_TEST to the
+                # spawned detached process; we forward it explicitly if set.
+                env = os.environ.copy()
+                for var in (
+                    "PYTEST_CURRENT_TEST",
+                    "AIXTERM_TEST_IDLE_LIMIT",
+                    "AIXTERM_TEST_IDLE_GRACE",
+                    "AIXTERM_RUNTIME_HOME",
+                ):
+                    if var in os.environ:
+                        env[var] = os.environ[var]
                 subprocess.Popen(
                     cmd,
                     stdout=subprocess.DEVNULL,
                     stderr=subprocess.DEVNULL,
                     start_new_session=True,
+                    env=env,
                 )
             except Exception as e:
                 logger.error("Failed to spawn service: %s", e)

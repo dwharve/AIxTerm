@@ -2,7 +2,11 @@
 
 from typing import Any, Dict, List, Optional
 
-import tiktoken
+# Optional tiktoken import; we will primarily rely on TokenManager
+try:  # pragma: no cover
+    import tiktoken  # type: ignore
+except Exception:  # pragma: no cover
+    tiktoken = None  # type: ignore
 
 
 class ToolOptimizer:
@@ -194,15 +198,18 @@ class ToolOptimizer:
         if not tools:
             return tools
 
-        # Calculate precise token usage for tools
-        encoding = tiktoken.encoding_for_model("gpt-4")
+        # Calculate token usage using TokenManager for robustness
         fitted_tools = []
         current_tokens = 0
 
         for tool in tools:
             # Calculate actual tokens for this tool
             tool_json = str(tool)
-            tool_tokens = len(encoding.encode(tool_json))
+            try:
+                tool_tokens = self.token_manager.estimate_tokens(tool_json)
+            except Exception:
+                # Fallback: rough estimate if token manager fails
+                tool_tokens = max(1, len(tool_json) // 4)
 
             if current_tokens + tool_tokens <= available_tokens:
                 fitted_tools.append(tool)

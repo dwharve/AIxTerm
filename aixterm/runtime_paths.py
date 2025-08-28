@@ -69,6 +69,9 @@ def get_runtime_dir(start: Optional[Path] = None) -> Path:
     Ignoring 'start' for runtime placement; directory is always at $HOME/.aixterm
     per updated requirements.
     """
+    override = os.environ.get("AIXTERM_RUNTIME_HOME")
+    if override:
+        return Path(override) / RUNTIME_DIR_NAME
     return Path.home() / RUNTIME_DIR_NAME
 
 

@@ -5,7 +5,7 @@ split into modular components for better maintainability.
 """
 
 from .app import AIxTermApp
-from .cli import main, run_cli_mode
+from .cli import main
 from .shell_integration import ShellIntegrationManager
 from .status_manager import StatusManager
 from .tools_manager import ToolsManager
@@ -48,9 +48,7 @@ class AIxTerm(AIxTermApp):
         """Initialize default configuration file."""
         self._status_manager.init_config(force=force)
 
-    def run_cli_mode(self, *args, **kwargs) -> None:
-        """Run AIxTerm in CLI mode."""
-        run_cli_mode(self, *args, **kwargs)
+    # CLI mode removed; service handles queries. Keep class for backward compat APIs only.
 
     def install_shell_integration(self, shell: str = "bash") -> None:
         """Install shell integration."""
@@ -82,7 +80,6 @@ __all__ = [
     "AIxTerm",
     "AIxTermApp",
     "main",
-    "run_cli_mode",
     "ToolsManager",
     "StatusManager",
     "ShellIntegrationManager",

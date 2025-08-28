@@ -6,7 +6,7 @@ based on your terminal context, with support for Model Context Protocol
 (MCP) servers.
 """
 
-__version__ = "0.1.4"
+__version__ = "0.2.1"
 __author__ = "AIxTerm Team"
 
 from .cleanup import CleanupManager
@@ -17,7 +17,6 @@ from .llm import LLMClient
 from .mcp_client import MCPClient
 
 __all__ = [
-    "__main__",
     "AIxTermConfig",
     "TerminalContext",
     "DisplayManager",

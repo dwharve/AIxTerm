@@ -1,12 +1,11 @@
 """Command-line interface for AIxTerm."""
 
 import argparse
+import os
 import sys
 from typing import List, Optional
 
 from aixterm.utils import get_current_shell, get_logger
-
-from .app import AIxTermApp
 from .shell_integration import ShellIntegrationManager
 from .status_manager import StatusManager
 from .tools_manager import ToolsManager
@@ -21,6 +20,20 @@ def parse_arguments() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="AIxTerm - Terminal AI Assistant",
         formatter_class=argparse.RawTextHelpFormatter,
+    )
+
+    # Streaming control (default: stream enabled)
+    parser.add_argument(
+        "--no-stream",
+        action="store_true",
+        help="Disable streaming output (non-streamed response)",
+    )
+
+    # Plugin help
+    parser.add_argument(
+        "--plugins-help",
+        action="store_true",
+        help="Show help information about plugins (e.g., devteam)",
     )
 
     # Main query argument
@@ -122,7 +135,7 @@ def parse_arguments() -> argparse.Namespace:
 
     # File options
     parser.add_argument(
-        "-",
+        "-f",
         "--file",
         action="append",
         metavar="PATH",
@@ -145,66 +158,48 @@ def parse_arguments() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def run_cli_mode(
-    app: AIxTermApp,
-    query: Optional[List[str]] = None,
-    context_lines: Optional[int] = None,  # Kept for compatibility but ignored
-    show_thinking: bool = False,  # Changed default to False (hidden by default)
-    no_prompt: bool = False,  # Kept for compatibility but ignored
-    use_planning: bool = False,
-    files: Optional[List[str]] = None,
-) -> None:
-    """Run AIxTerm in CLI mode.
+def _resolve_query_from_args(args_query: Optional[List[str]]) -> Optional[str]:
+    """Resolve the query text from CLI args or stdin.
 
-    Args:
-        app: AIxTerm application instance
-        query: Optional query text as list of arguments
-        context_lines: Optional number of context lines (deprecated, ignored)
-
-        show_thinking: Whether to show thinking content (hidden by default)
-        no_prompt: Whether to suppress prompt collection (deprecated, ignored)
-        use_planning: Whether to use planning mode
-        files: Optional list of file paths to include in context
+    Priority:
+    1) If args provided, use them (join with spaces).
+    2) If args is ["-"], read stdin.
+    3) If no args and stdin is not a TTY, read stdin.
     """
     logger = get_logger(__name__)
-
-    # Check if we have input from stdin
-    has_stdin = not sys.stdin.isatty()
-
-    # Determine query source
-    if has_stdin:
-        # Read from stdin
-        logger.debug("Reading query from stdin")
-        query_text = sys.stdin.read().strip()
-    elif query and query[0] == "-":
-        # Single dash means read from stdin
-        logger.debug("Reading query from stdin (- argument)")
-        query_text = sys.stdin.read().strip()
-    elif query:
-        # Use provided query
-        logger.debug(f"Using provided query: {query}")
-        query_text = " ".join(query)
-    else:
-        # No query provided
-        logger.error("No query provided")
-        app.display_manager.show_error("Error: No query provided.")
-        return
-
-    # Run query
-    app.run(
-        query=query_text,
-        context=[str(i) for i in range(context_lines)] if context_lines else None,
-        show_thinking=show_thinking,
-        no_prompt=no_prompt,
-        use_planning=use_planning,
-        files=files or [],
-    )
+    if args_query:
+        if len(args_query) == 1 and args_query[0] == "-":
+            logger.debug("Reading query from stdin (- argument)")
+            return sys.stdin.read().strip()
+        logger.debug(f"Using provided query: {args_query}")
+        return " ".join(args_query)
+    # No args; fallback to stdin if available
+    if not sys.stdin.isatty():
+        logger.debug("Reading query from stdin (no args)")
+        return sys.stdin.read().strip()
+    return None
 
 
 def main() -> None:
     """Main entry point for AIxTerm."""
     # Parse arguments
     args = parse_arguments()
+
+    # Apply debug flag early so all subsequent component initializations inherit it.
+    # We intentionally set both environment variable (picked up by get_logger) and
+    # adjust any already-created root/logger levels to DEBUG.
+    if getattr(args, "debug", False):  # compatibility guard
+        os.environ["AIXTERM_LOG_LEVEL"] = "DEBUG"
+        import logging
+
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.DEBUG)
+        # Bump any existing named loggers that may have been created prior to this point
+        for name in list(logging.Logger.manager.loggerDict.keys()):
+            try:
+                logging.getLogger(name).setLevel(logging.DEBUG)
+            except Exception:
+                pass
 
     # Set default shell for install/uninstall if not specified
     # Only set defaults if the arguments were actually provided (marked with __DEFAULT__)
@@ -215,50 +210,77 @@ def main() -> None:
         args.uninstall_shell = current_shell
 
     try:
-        # Initialize application
-        app = AIxTermApp(config_path=args.config)
+        # Delay heavy application construction unless needed for non-query commands
+        app = None
 
-        # Handle API overrides
-        if hasattr(args, "api_url") and args.api_url:
-            app.config.set("api_url", args.api_url)
+        # If debug, also push into runtime config later if we construct app
 
-        if hasattr(args, "api_key") and args.api_key:
-            app.config.set("api_key", args.api_key)
+        # For service-backed queries we do not mutate runtime config here; service owns config
 
-        # Create managers
-        tools_manager = ToolsManager(app)
-        status_manager = StatusManager(app)
-        shell_manager = ShellIntegrationManager(app)
+        # Managers will be created lazily only if needed (requires app)
+        tools_manager = status_manager = shell_manager = None
 
         # Handle context clearing
         if args.clear_context:
-            status_manager.clear_context()
-            return
+            from .app import AIxTermApp  # lazy
+            app = app or AIxTermApp(config_path=args.config)
+            status_manager = status_manager or StatusManager(app)
+            # Determine if a prompt will follow (positional args or stdin)
+            has_stdin = not sys.stdin.isatty()
+            has_args = bool(args.query)
+            will_run_prompt = has_stdin or has_args
+
+            # Suppress output when a prompt is present to avoid extra lines before inference output
+            status_manager.clear_context(suppress_output=will_run_prompt)
+
+            # If no prompt is provided, exit after clearing
+            if not will_run_prompt:
+                return
 
         # Handle cleanup
         if args.cleanup:
+            from .app import AIxTermApp  # lazy
+            app = app or AIxTermApp(config_path=args.config)
+            status_manager = status_manager or StatusManager(app)
             status_manager.cleanup_now()
             return
 
         # Handle status display
         if args.status:
+            from .app import AIxTermApp  # lazy
+            app = app or AIxTermApp(config_path=args.config)
+            status_manager = status_manager or StatusManager(app)
             status_manager.show_status()
             return
 
-        # Handle service restart (before other potentially long-running operations)
+        # Handle plugins help
+        if getattr(args, "plugins_help", False):
+            from .app import AIxTermApp  # lazy
+            app = app or AIxTermApp(config_path=args.config)
+            app.display_manager.show_info("Plugins Help")
+            app.display_manager.show_info(
+                "- devteam: An example MCP plugin that exposes project/team tools.\n"
+                "  Enable via config under mcp_servers. After enabling, restart the service (ai --restart).\n"
+                "  Then, the LLM can discover and call devteam tools automatically.\n"
+                "  See docs/plugins/README.md and docs/plugins/API.md for details."
+            )
+            return
+
+        # Handle service restart (full process restart)
         if getattr(args, "restart", False):  # use getattr for compatibility with older mocks
             from aixterm.client.client import AIxTermClient  # local import to avoid startup cost
-
-            app.display_manager.show_info("Requesting service restart...")
+            from .app import AIxTermApp  # lazy for display only
+            app = app or AIxTermApp(config_path=args.config)
+            app.display_manager.show_info("Restarting AIxTerm service (full process restart)...")
             client = AIxTermClient(config_path=args.config)
             try:
-                response = client.control("restart")
-            except Exception as e:  # network / IPC errors
-                app.display_manager.show_error(f"Failed to send restart command: {e}")
+                response = client.full_restart()
+            except Exception as e:  # errors during restart
+                app.display_manager.show_error(f"Failed to restart service: {e}")
                 return
 
             if response.get("status") == "success":
-                app.display_manager.show_success("Service restart initiated.")
+                app.display_manager.show_success("Service fully restarted.")
             else:
                 err = response.get("error", {})
                 msg = err.get("message", "Unknown error")
@@ -267,28 +289,55 @@ def main() -> None:
 
         # Handle tool listing
         if args.list_tools:
+            from .app import AIxTermApp  # lazy
+            app = app or AIxTermApp(config_path=args.config)
+            tools_manager = tools_manager or ToolsManager(app)
             tools_manager.list_tools()
             return
 
         # Handle shell integration - only if arguments were actually provided
         if args.install_shell is not None:
+            from .app import AIxTermApp  # lazy
+            app = app or AIxTermApp(config_path=args.config)
+            shell_manager = shell_manager or ShellIntegrationManager(app)
             shell_manager.install_integration(args.install_shell)
             return
 
         if args.uninstall_shell is not None:
+            from .app import AIxTermApp  # lazy
+            app = app or AIxTermApp(config_path=args.config)
+            shell_manager = shell_manager or ShellIntegrationManager(app)
             shell_manager.uninstall_integration(args.uninstall_shell)
             return
 
-        # Run in CLI mode
-        run_cli_mode(
-            app=app,
-            query=args.query,
-            context_lines=None,  # Removed context lines support
-            show_thinking=args.thinking,  # Now defaults to False (hidden)
-            no_prompt=False,  # Removed no_prompt argument
-            use_planning=args.plan if hasattr(args, "plan") else False,
-            files=args.file if hasattr(args, "file") and args.file else [],
-        )
+        # Default path: send query to running service (no local CLI mode)
+        query_text = _resolve_query_from_args(args.query)
+        if not query_text:
+            logger = get_logger(__name__)
+            logger.error("No query provided")
+            print("Error: No query provided.")
+            return
+
+        from aixterm.client.client import AIxTermClient
+        client = AIxTermClient(config_path=args.config)
+        # Pass user's stream preference through
+        stream_flag = not getattr(args, "no_stream", False)
+        response = client.query(query_text, stream=stream_flag)
+        if response.get("status") != "success":
+            err = response.get("error", {})
+            print(f"Error: {err.get('message', 'Unknown error')}")
+            return
+        # If streaming occurred, chunks were already printed live
+        if response.get("already_streamed") or (
+            isinstance(response.get("result"), dict) and response["result"].get("already_streamed")
+        ):
+            return
+        result = response.get("result", {})
+        content = result if isinstance(result, str) else result.get("content", "")
+        if content:
+            print(content)
+        else:
+            print("(no content)")
     except KeyboardInterrupt:
         logger = get_logger(__name__)
         logger.info("Operation cancelled by user.")
