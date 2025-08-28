@@ -753,31 +753,88 @@ class AuditGenerator:
                     action="Consider breaking down complex modules"
                 )
 
+    def _build_metrics_section(self, data: Dict[str, Any]) -> str:
+        """Build the Language & File Metrics section of the report."""
+        cloc_output = data['cloc_output']
+        file_metrics = data['file_metrics']
+        
+        section = "## Language & File Metrics\n\n### Code Statistics (cloc)\n\n"
+        
+        if cloc_output:
+            section += f"```\n{cloc_output}\n```\n\n"
+        else:
+            section += "```\ncloc not available - install with: apt-get install cloc\n```\n\n"
+
+        section += f"""### File Distribution
+
+- **Total Files:** {file_metrics['total_files']:,}
+- **Total Size:** {file_metrics['total_size'] / 1024 / 1024:.1f} MB
+
+#### By File Type
+"""
+
+        for ext, count in sorted(file_metrics['by_extension'].items(),
+                                 key=lambda x: x[1], reverse=True)[:10]:
+            section += f"- {ext or 'no extension'}: {count} files\n"
+
+        section += "\n#### Largest Files\n"
+        for size, filepath in file_metrics['largest_files'][:10]:
+            size_kb = size / 1024
+            section += f"- {filepath}: {size_kb:.1f} KB\n"
+        
+        return section + "\n"
+
+    def _build_dependencies_section(self, dependencies: Dict[str, List[str]]) -> str:
+        """Build the Dependency Inventory section of the report."""
+        section = "## Dependency Inventory\n\n"
+        
+        if dependencies:
+            for dep_file, deps in dependencies.items():
+                section += f"### {dep_file}\n"
+                for dep in sorted(deps)[:20]:  # Limit to top 20
+                    section += f"- {dep}\n"
+                section += "\n"
+        else:
+            section += "No dependency files detected.\n\n"
+            
+        return section
+
+    def _collect_analysis_data(self) -> Dict[str, Any]:
+        """Collect all analysis data for the audit report."""
+        return {
+            'repo_structure': self.get_repository_structure(),
+            'cloc_output': self.get_cloc_metrics(),
+            'file_metrics': self.get_file_metrics(),
+            'dependencies': self.analyze_dependencies(),
+            'makefile_targets': self.analyze_makefile_targets(),
+            'ci_workflows': self.analyze_ci_workflows(),
+            'config_patterns': self.find_config_patterns(),
+            'logging_patterns': self.analyze_logging_patterns(),
+            'error_patterns': self.analyze_error_patterns(),
+            'async_patterns': self.analyze_async_patterns(),
+            'annotations': self.find_code_annotations(),
+            'commented_blocks': self.find_commented_code_blocks(),
+            'duplications': self.find_potential_duplications(),
+            'test_coverage': self.analyze_test_coverage_surface(),
+        }
+
     def generate_audit_report(self) -> str:
         """Generate the complete audit report."""
         git_info = self.get_git_info()
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Collect all analysis data
-        repo_structure = self.get_repository_structure()
-        cloc_output = self.get_cloc_metrics()
-        file_metrics = self.get_file_metrics()
-        dependencies = self.analyze_dependencies()
-        makefile_targets = self.analyze_makefile_targets()
-        ci_workflows = self.analyze_ci_workflows()
-        config_patterns = self.find_config_patterns()
-        logging_patterns = self.analyze_logging_patterns()
-        error_patterns = self.analyze_error_patterns()
-        async_patterns = self.analyze_async_patterns()
-        annotations = self.find_code_annotations()
-        commented_blocks = self.find_commented_code_blocks()
-        duplications = self.find_potential_duplications()
-        test_coverage = self.analyze_test_coverage_surface()
-        hotspots = self.identify_risk_hotspots(file_metrics)
+        data = self._collect_analysis_data()
+        hotspots = self.identify_risk_hotspots(data['file_metrics'])
 
         # Generate findings
-        duplications_data = duplications
-        self.generate_findings(annotations, duplications_data.get('duplications', []), file_metrics, hotspots)
+        duplications_data = data['duplications']
+        self.generate_findings(
+            data['annotations'], 
+            duplications_data.get('duplications', []), 
+            data['file_metrics'], 
+            hotspots
+        )
 
         # Build report
         report = f"""# AIxTerm Repository Audit Report
@@ -792,60 +849,25 @@ class AuditGenerator:
 ## Repository Structure
 
 ```
-{repo_structure}
+{data['repo_structure']}
 ```
 
-## Language & File Metrics
-
-### Code Statistics (cloc)
+{self._build_metrics_section(data)}
+{self._build_dependencies_section(data['dependencies'])}
+## Tooling & Automation Inventory
 
 """
-
-        if cloc_output:
-            report += f"```\n{cloc_output}\n```\n\n"
-        else:
-            report += "```\ncloc not available - install with: apt-get install cloc\n```\n\n"
-
-        report += f"""### File Distribution
-
-- **Total Files:** {file_metrics['total_files']:,}
-- **Total Size:** {file_metrics['total_size'] / 1024 / 1024:.1f} MB
-
-#### By File Type
-"""
-
-        for ext, count in sorted(file_metrics['by_extension'].items(),
-                                 key=lambda x: x[1], reverse=True)[:10]:
-            report += f"- {ext or 'no extension'}: {count} files\n"
-
-        report += "\n#### Largest Files\n"
-        for size, filepath in file_metrics['largest_files'][:10]:
-            size_kb = size / 1024
-            report += f"- {filepath}: {size_kb:.1f} KB\n"
-
-        report += "\n## Dependency Inventory\n\n"
-
-        if dependencies:
-            for dep_file, deps in dependencies.items():
-                report += f"### {dep_file}\n"
-                for dep in sorted(deps)[:20]:  # Limit to top 20
-                    report += f"- {dep}\n"
-                report += "\n"
-        else:
-            report += "No dependency files detected.\n\n"
-
-        report += "## Tooling & Automation Inventory\n\n"
 
         report += "### Makefile Targets\n"
-        if makefile_targets:
-            for target in sorted(makefile_targets)[:20]:
+        if data['makefile_targets']:
+            for target in sorted(data['makefile_targets'])[:20]:
                 report += f"- {target}\n"
         else:
             report += "No Makefile found.\n"
 
         report += "\n### CI/CD Workflows\n"
-        if ci_workflows:
-            for workflow in sorted(ci_workflows):
+        if data['ci_workflows']:
+            for workflow in sorted(data['ci_workflows']):
                 report += f"- {workflow}\n"
         else:
             report += "No GitHub workflows found.\n"
