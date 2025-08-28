@@ -1,5 +1,7 @@
 """Base class for shell integrations."""
 
+import os
+import subprocess
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -62,15 +64,70 @@ class BaseIntegration(ABC):
         """
         pass
 
-    @abstractmethod
     def is_available(self) -> bool:
-        """Check if the shell is available on the system."""
-        pass
+        """Check if the shell is available on the system.
+        
+        Default implementation checks if shell command exists and responds to --version.
+        Subclasses can override for shell-specific behavior.
+        """
+        try:
+            result = subprocess.run(
+                [self.shell_name, "--version"], 
+                capture_output=True, 
+                text=True, 
+                timeout=5
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
 
-    @abstractmethod
     def validate_integration_environment(self) -> bool:
-        """Validate that the environment is suitable for integration."""
-        pass
+        """Validate that the environment is suitable for integration.
+        
+        Default implementation performs common checks:
+        - TTY detection capability
+        - Home directory write permissions
+        
+        Subclasses can override to add shell-specific validations.
+        """
+        try:
+            # Check if we can detect TTY
+            tty_result = os.system("tty >/dev/null 2>&1")
+            if tty_result != 0:
+                return False
+
+            # Check if we can write to home directory
+            home = Path.home()
+            test_file = home / ".aixterm_test"
+            try:
+                test_file.write_text("test")
+                test_file.unlink()
+                return True
+            except Exception:
+                return False
+        except Exception:
+            return False
+
+    def get_current_shell_version(self) -> Optional[str]:
+        """Get the current shell version.
+        
+        Default implementation calls shell --version and returns first line.
+        Subclasses can override for shell-specific version detection.
+        """
+        try:
+            result = subprocess.run(
+                [self.shell_name, "--version"], 
+                capture_output=True, 
+                text=True, 
+                timeout=5
+            )
+            if result.returncode == 0:
+                # Extract version from first line
+                first_line = result.stdout.split("\n")[0]
+                return first_line.strip()
+            return None
+        except Exception:
+            return None
 
     @abstractmethod
     def get_installation_notes(self) -> List[str]:

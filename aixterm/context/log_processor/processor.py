@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ...config_env.env_vars import get_aixterm_log_file
 from .parsing import extract_commands_from_log, extract_conversation_from_log
 from .summary import build_tiered_summary
 from .tokenization import read_and_truncate_log, truncate_text_to_tokens
@@ -58,7 +59,7 @@ class LogProcessor:
 
     def find_log_file(self) -> Optional[Path]:
         """Return log file for current session (env override > TTY > default)."""
-        active_env = os.environ.get("_AIXTERM_LOG_FILE")
+        active_env = get_aixterm_log_file()
         if active_env:
             try:
                 path = Path(active_env)

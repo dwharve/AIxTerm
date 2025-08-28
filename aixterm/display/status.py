@@ -3,6 +3,7 @@
 from typing import Any
 
 from ..utils import get_logger
+from ..config_env.env_vars import get_show_timing
 from .types import MessageType
 
 
@@ -78,8 +79,7 @@ class StatusDisplay:
         # Suppressed by default to keep CLI output clean.
         # If desired in the future, re-enable via config/env flag.
         try:
-            import os
-            if os.environ.get("AIXTERM_SHOW_TIMING", "").lower() in ("1", "true", "yes"):  # optional opt-in
+            if get_show_timing():  # optional opt-in
                 # Format time nicely
                 if seconds < 0.1:
                     time_str = f"{seconds * 1000:.0f}ms"

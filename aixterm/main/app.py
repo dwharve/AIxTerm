@@ -12,6 +12,7 @@ from aixterm.display import create_display_manager
 from aixterm.llm import LLMClient, LLMError
 from aixterm.mcp_client import MCPClient
 from aixterm.utils import get_logger
+from aixterm.lifecycle import shutdown_all
 
 
 class AIxTermApp:
@@ -229,17 +230,16 @@ class AIxTermApp:
         """Shut down the application and clean up resources."""
         self.logger.info("Shutting down AIxTerm")
 
-        # Shutdown components in reverse initialization order
+        # Shutdown components in reverse initialization order using lifecycle utility
+        components = []
         if hasattr(self, "cleanup_manager"):
-            self.cleanup_manager.shutdown()
-
+            components.append(self.cleanup_manager)
         if hasattr(self, "llm_client"):
-            self.llm_client.shutdown()
-
+            components.append(self.llm_client)
         if hasattr(self, "mcp_client"):
-            self.mcp_client.shutdown()
-
+            components.append(self.mcp_client)
         if hasattr(self, "context_manager"):
-            self.context_manager.shutdown()
+            components.append(self.context_manager)
 
+        shutdown_all(*components, logger=self.logger)
         self.logger.info("AIxTerm shutdown complete")

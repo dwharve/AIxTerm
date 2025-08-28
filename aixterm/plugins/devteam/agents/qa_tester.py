@@ -24,20 +24,10 @@ class QATesterAgent(Agent):
     - Verify requirements
     """
 
-    @property
-    def agent_type(self) -> str:
-        """Get the agent type."""
-        return "qa_tester"
-
-    @property
-    def name(self) -> str:
-        """Get the agent name."""
-        return "QA Tester"
-
-    @property
-    def description(self) -> str:
-        """Get the agent description."""
-        return "Designs tests, finds bugs, and verifies quality"
+    # Declarative agent attributes (eliminates boilerplate property methods)
+    _agent_type = "qa_tester"
+    _name = "QA Tester"
+    _description = "Designs tests, finds bugs, and verifies quality"
 
     async def process_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """

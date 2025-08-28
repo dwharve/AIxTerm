@@ -11,6 +11,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from .utils import get_logger
+from .lifecycle import LifecycleManager
 
 
 @dataclass
@@ -332,14 +333,16 @@ class MCPClient:
     def shutdown(self) -> None:
         """Shutdown all MCP servers."""
         self.logger.info("Shutting down MCP servers")
-        for server_name, server in self.servers.items():
-            try:
-                server.stop()
-                self.logger.info(f"Stopped MCP server: {server_name}")
-            except Exception as e:
-                self.logger.error(f"Error stopping MCP server {server_name}: {e}")
-
+        
+        # Use lifecycle manager for consistent shutdown handling
+        lifecycle_manager = LifecycleManager(self.logger)
+        success = lifecycle_manager.shutdown_registry(self.servers, "MCP servers")
+        
+        # Clear servers registry regardless of success to prevent further use
         self.servers.clear()
+        
+        if not success:
+            self.logger.warning("Some MCP servers may not have shut down cleanly")
         self._initialized = False
 
         # Clear progress callbacks

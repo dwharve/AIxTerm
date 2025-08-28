@@ -402,51 +402,9 @@ export _AIXTERM_INTEGRATION_LOADED=1
 } >> "$(_aixterm_get_log_file)" 2>/dev/null
 """
 
-    def is_available(self) -> bool:
-        """Check if zsh is available on the system."""
-        try:
-            import subprocess
-
-            result = subprocess.run(
-                ["zsh", "--version"], capture_output=True, text=True, timeout=5
-            )
-            return result.returncode == 0
-        except Exception:
-            return False
-
-    def get_current_shell_version(self) -> Optional[str]:
-        """Get the current zsh version."""
-        try:
-            import subprocess
-
-            result = subprocess.run(
-                ["zsh", "--version"], capture_output=True, text=True, timeout=5
-            )
-            if result.returncode == 0:
-                return result.stdout.strip()
-            return None
-        except Exception:
-            return None
-
-    def validate_integration_environment(self) -> bool:
-        """Validate that the zsh environment supports our integration."""
-        try:
-            # Check if we can detect TTY
-            tty_result = os.system("tty >/dev/null 2>&1")
-            if tty_result != 0:
-                return False
-
-            # Check if we can write to home directory
-            home = Path.home()
-            test_file = home / ".aixterm_test"
-            try:
-                test_file.write_text("test")
-                test_file.unlink()
-                return True
-            except Exception:
-                return False
-        except Exception:
-            return False
+    # Note: is_available() and validate_integration_environment() now use 
+    # default implementations from BaseIntegration. get_current_shell_version() 
+    # also uses the default implementation.
 
     def get_installation_notes(self) -> List[str]:
         """Return zsh-specific installation notes."""
