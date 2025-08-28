@@ -982,16 +982,16 @@ class AuditGenerator:
 
         report += "\n## Test Coverage Surface Mapping\n\n"
 
-        report += f"### Test Files ({len(test_coverage['test_files'])})\n"
-        for test_file in sorted(test_coverage['test_files'])[:15]:
+        report += f"### Test Files ({len(data['test_coverage']['test_files'])})\n"
+        for test_file in sorted(data['test_coverage']['test_files'])[:15]:
             report += f"- {test_file}\n"
 
-        report += f"\n### Source Directories ({len(test_coverage['source_directories'])})\n"
-        for src_dir in sorted(test_coverage['source_directories']):
+        report += f"\n### Source Directories ({len(data['test_coverage']['source_directories'])})\n"
+        for src_dir in sorted(data['test_coverage']['source_directories']):
             report += f"- {src_dir}/\n"
 
         report += "\n### Test to Source Mapping\n"
-        for mapping in sorted(test_coverage['test_to_source_mapping'])[:10]:
+        for mapping in sorted(data['test_coverage']['test_to_source_mapping'])[:10]:
             report += f"- {mapping}\n"
 
         report += "\n## Build & CI Quality Gates\n\n"
