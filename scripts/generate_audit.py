@@ -874,7 +874,7 @@ class AuditGenerator:
 
         report += "\n## Configuration Discovery\n\n"
 
-        for pattern_name, files in config_patterns.items():
+        for pattern_name, files in data['config_patterns'].items():
             if pattern_name == 'env_var_names':
                 continue  # Handle this separately
             if files:
@@ -884,7 +884,7 @@ class AuditGenerator:
                 report += "\n"
 
         # Add detailed environment variable names table
-        env_var_names = config_patterns.get('env_var_names', {})
+        env_var_names = data['config_patterns'].get('env_var_names', {})
         if env_var_names:
             report += "### Environment Variable Names\n\n"
             report += "| Env Var | Files | Occurrence Count |\n"
@@ -900,7 +900,7 @@ class AuditGenerator:
 
         report += "## Logging Patterns\n\n"
 
-        for pattern_name, files in logging_patterns.items():
+        for pattern_name, files in data['logging_patterns'].items():
             if files:
                 report += f"### {pattern_name.replace('_', ' ').title()}\n"
                 for file_info in sorted(files)[:10]:
@@ -909,7 +909,7 @@ class AuditGenerator:
 
         report += "## Error Handling Patterns\n\n"
 
-        for pattern_name, files in error_patterns.items():
+        for pattern_name, files in data['error_patterns'].items():
             if files:
                 report += f"### {pattern_name.replace('_', ' ').title()}\n"
                 for file_info in sorted(files)[:10]:
@@ -918,7 +918,7 @@ class AuditGenerator:
 
         report += "## Async/Concurrency Patterns\n\n"
 
-        for pattern_name, files in async_patterns.items():
+        for pattern_name, files in data['async_patterns'].items():
             if files:
                 report += f"### {pattern_name.replace('_', ' ').title()}\n"
                 for file_info in sorted(files)[:10]:
@@ -927,27 +927,27 @@ class AuditGenerator:
 
         report += "## Code Annotations\n\n"
 
-        if annotations:
+        if data['annotations']:
             report += "| File | Line | Type | Description |\n"
             report += "|------|------|------|-------------|\n"
-            for ann in sorted(annotations, key=lambda x: (x['type'], x['file']))[:30]:
+            for ann in sorted(data['annotations'], key=lambda x: (x['type'], x['file']))[:30]:
                 report += f"| {ann['file']} | {ann['line']} | {ann['type']} | {ann['text']} |\n"
         else:
             report += "No code annotations found.\n"
 
         report += "\n## Commented-Out Code Blocks\n\n"
 
-        if commented_blocks:
+        if data['commented_blocks']:
             report += "| File | Line Range | Length |\n"
             report += "|------|------------|--------|\n"
-            for block in sorted(commented_blocks, key=lambda x: x['length'], reverse=True)[:15]:
+            for block in sorted(data['commented_blocks'], key=lambda x: x['length'], reverse=True)[:15]:
                 report += f"| {block['file']} | {block['start_line']}-{block['end_line']} | {block['length']} lines |\n"
         else:
             report += "No large commented-out code blocks detected.\n"
 
         report += "\n## Potential Duplication Candidates\n\n"
 
-        duplications_data = duplications
+        duplications_data = data['duplications']
         duplication_table = duplications_data.get('duplication_table', [])
         dunder_summary = duplications_data.get('dunder_summary', [])
         total_candidates = duplications_data.get('total_distinct_duplication_candidates', 0)
