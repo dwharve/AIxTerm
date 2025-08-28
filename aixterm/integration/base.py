@@ -7,6 +7,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, List, Optional
 
+from ..utils import get_logger
+
 
 class BaseIntegration(ABC):
     """Base class for shell integration implementations."""
@@ -17,23 +19,9 @@ class BaseIntegration(ABC):
         Args:
             logger: Logger instance
         """
-        # Lazy default logger to avoid requiring subclasses to pass one
+        # Use centralized logger utility when no logger is provided
         if logger is None:
-
-            class _NullLogger:
-                def debug(self, msg: str) -> None:  # pragma: no cover - simple stub
-                    pass
-
-                def info(self, msg: str) -> None:  # pragma: no cover - simple stub
-                    pass
-
-                def warning(self, msg: str) -> None:  # pragma: no cover - simple stub
-                    pass
-
-                def error(self, msg: str) -> None:  # pragma: no cover - simple stub
-                    pass
-
-            self.logger = _NullLogger()
+            self.logger = get_logger(__name__)
         else:
             self.logger = logger
         self.integration_marker = "# AIxTerm Shell Integration"
@@ -66,16 +54,13 @@ class BaseIntegration(ABC):
 
     def is_available(self) -> bool:
         """Check if the shell is available on the system.
-        
+
         Default implementation checks if shell command exists and responds to --version.
         Subclasses can override for shell-specific behavior.
         """
         try:
             result = subprocess.run(
-                [self.shell_name, "--version"], 
-                capture_output=True, 
-                text=True, 
-                timeout=5
+                [self.shell_name, "--version"], capture_output=True, text=True, timeout=5
             )
             return result.returncode == 0
         except Exception:
@@ -83,11 +68,11 @@ class BaseIntegration(ABC):
 
     def validate_integration_environment(self) -> bool:
         """Validate that the environment is suitable for integration.
-        
+
         Default implementation performs common checks:
         - TTY detection capability
         - Home directory write permissions
-        
+
         Subclasses can override to add shell-specific validations.
         """
         try:
@@ -110,16 +95,13 @@ class BaseIntegration(ABC):
 
     def get_current_shell_version(self) -> Optional[str]:
         """Get the current shell version.
-        
+
         Default implementation calls shell --version and returns first line.
         Subclasses can override for shell-specific version detection.
         """
         try:
             result = subprocess.run(
-                [self.shell_name, "--version"], 
-                capture_output=True, 
-                text=True, 
-                timeout=5
+                [self.shell_name, "--version"], capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0:
                 # Extract version from first line
@@ -267,9 +249,9 @@ class BaseIntegration(ABC):
         return (
             f"\n{self.integration_marker}\n"
             f"# Source AIxTerm {self.shell_name} integration rc file\n"
-            f"AIXTERM_RC=\"$HOME/.aixterm/{rc_file.name}\"\n"
-            f"if [ -f \"$AIXTERM_RC\" ]; then\n"
-            f"    . \"$AIXTERM_RC\"\n"
+            f'AIXTERM_RC="$HOME/.aixterm/{rc_file.name}"\n'
+            f'if [ -f "$AIXTERM_RC" ]; then\n'
+            f'    . "$AIXTERM_RC"\n'
             f"fi\n"
         )
 
@@ -355,7 +337,7 @@ class BaseIntegration(ABC):
                     i = j
                     continue
                 # Old snippet patterns that might lack variable or marker handling
-                if rc_ref in line or "AIXTERM_RC=\"$HOME/.aixterm/" in line:
+                if rc_ref in line or 'AIXTERM_RC="$HOME/.aixterm/' in line:
                     # Attempt to skip an enclosing if block if present (line may be 'if [ -f ...')
                     j = i + 1
                     while j < total and lines[j].strip() != "fi":
