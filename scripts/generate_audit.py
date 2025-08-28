@@ -258,9 +258,10 @@ class AuditGenerator:
 
         return workflows
 
-    def find_config_patterns(self) -> Dict[str, List[str]]:
+    def find_config_patterns(self) -> Dict[str, Any]:
         """Find configuration and environment variable access patterns."""
         patterns = defaultdict(list)
+        env_var_names = defaultdict(list)  # Track specific env var names
 
         # Patterns to search for
         config_patterns = {
@@ -268,6 +269,14 @@ class AuditGenerator:
             'config_files': r'\.(?:config|cfg|ini|conf|yaml|yml|json|toml)\b',
             'settings': r'\b(?:settings|config|configuration)\b'
         }
+
+        # Patterns to extract specific environment variable names
+        env_var_patterns = [
+            r'os\.getenv\(["\']([^"\']+)["\']',
+            r'os\.environ\[["\']([^"\']+)["\']\]',
+            r'os\.environ\.get\(["\']([^"\']+)["\']',
+            r'getenv\(["\']([^"\']+)["\']'
+        ]
 
         for root, dirs, files in os.walk(self.repo_root):
             dirs[:] = [d for d in dirs if d not in self.exclude_dirs]
@@ -287,20 +296,34 @@ class AuditGenerator:
                             patterns[pattern_name].append(
                                 f"{rel_path} ({len(matches)} occurrences)")
 
+                    # Extract specific environment variable names
+                    for pattern in env_var_patterns:
+                        matches = re.findall(pattern, content)
+                        for var_name in matches:
+                            if var_name not in env_var_names:
+                                env_var_names[var_name] = []
+                            env_var_names[var_name].append(rel_path)
+
                 except Exception:
                     continue
 
-        return dict(patterns)
+        result = dict(patterns)
+        result['env_var_names'] = dict(env_var_names)
+        return result
 
     def analyze_logging_patterns(self) -> Dict[str, List[str]]:
-        """Analyze logging usage patterns."""
+        """Analyze logging usage patterns with granular metrics."""
         patterns = defaultdict(list)
 
         logging_patterns = {
             'console_log': r'\bconsole\.(log|error|warn|info|debug)\b',
             'python_logging': r'\blog(?:ger)?\.(debug|info|warn|warning|error|critical)\b',
             'print_statements': r'\bprint\s*\(',
-            'custom_loggers': r'getLogger|Logger\('
+            'custom_loggers': r'getLogger|Logger\(',
+            # New granular patterns
+            'logger_instances': r'(?:logger\s*=\s*)?logging\.getLogger\(',
+            'direct_logging_calls': r'logging\.(debug|info|warn|warning|error|critical)\(',
+            'module_loggers': r'__name__.*getLogger',
         }
 
         for root, dirs, files in os.walk(self.repo_root):
@@ -484,10 +507,11 @@ class AuditGenerator:
 
         return code_blocks
 
-    def find_potential_duplications(self) -> List[str]:
-        """Find potential code duplications."""
+    def find_potential_duplications(self) -> Dict[str, Any]:
+        """Find potential code duplications with detailed breakdown."""
         duplications = []
         function_names = defaultdict(list)
+        dunder_methods = defaultdict(list)  # Track dunder methods separately
 
         # Look for repeated function/method names
         for root, dirs, files in os.walk(self.repo_root):
@@ -514,18 +538,55 @@ class AuditGenerator:
                         matches = re.findall(pattern, content)
                         for func_name in matches:
                             if len(func_name) > 3:  # Ignore very short names
-                                function_names[func_name].append(rel_path)
+                                if func_name.startswith('__') and func_name.endswith('__'):
+                                    # Track dunder methods separately
+                                    dunder_methods[func_name].append(rel_path)
+                                else:
+                                    function_names[func_name].append(rel_path)
 
                 except Exception:
                     continue
 
-        # Report functions that appear in multiple files
+        # Build detailed duplication table
+        duplication_table = []
         for func_name, files in function_names.items():
             if len(files) > 1:
+                # Remove duplicates from file list but keep count
+                unique_files = list(set(files))
+                file_count = len(files)
+                # Truncate file paths if too many
+                if len(unique_files) > 8:
+                    file_paths = ", ".join(unique_files[:8]) + f" ... ({len(unique_files)-8} more)"
+                else:
+                    file_paths = ", ".join(unique_files)
+                    
+                duplication_table.append({
+                    'function_name': func_name,
+                    'file_count': file_count,
+                    'unique_file_count': len(unique_files),
+                    'file_paths': file_paths
+                })
+                
                 duplications.append(
-                    f"Function '{func_name}' appears in: {', '.join(files)}")
+                    f"Function '{func_name}' appears in: {', '.join(unique_files)}")
 
-        return duplications[:20]  # Limit to top 20
+        # Build dunder methods summary
+        dunder_summary = []
+        for dunder_name, files in dunder_methods.items():
+            if len(files) > 1:
+                unique_files = list(set(files))
+                dunder_summary.append({
+                    'method_name': dunder_name,
+                    'file_count': len(files),
+                    'unique_file_count': len(unique_files),
+                    'file_paths': ", ".join(unique_files[:5]) + (f" ... ({len(unique_files)-5} more)" if len(unique_files) > 5 else "")
+                })
+
+        return {
+            'duplications': duplications[:20],  # Limit to top 20 for backward compatibility
+            'duplication_table': sorted(duplication_table, key=lambda x: x['unique_file_count'], reverse=True)[:20],
+            'dunder_summary': sorted(dunder_summary, key=lambda x: x['unique_file_count'], reverse=True)[:10]
+        }
 
     def analyze_test_coverage_surface(self) -> Dict[str, Any]:
         """Analyze test coverage surface (static mapping only)."""
@@ -705,7 +766,8 @@ class AuditGenerator:
         hotspots = self.identify_risk_hotspots(file_metrics)
 
         # Generate findings
-        self.generate_findings(annotations, duplications, file_metrics, hotspots)
+        duplications_data = duplications
+        self.generate_findings(annotations, duplications_data.get('duplications', []), file_metrics, hotspots)
 
         # Build report
         report = f"""# AIxTerm Repository Audit Report
@@ -781,11 +843,28 @@ class AuditGenerator:
         report += "\n## Configuration Discovery\n\n"
 
         for pattern_name, files in config_patterns.items():
+            if pattern_name == 'env_var_names':
+                continue  # Handle this separately
             if files:
                 report += f"### {pattern_name.replace('_', ' ').title()}\n"
                 for file_info in sorted(files)[:10]:
                     report += f"- {file_info}\n"
                 report += "\n"
+
+        # Add detailed environment variable names table
+        env_var_names = config_patterns.get('env_var_names', {})
+        if env_var_names:
+            report += "### Environment Variable Names\n\n"
+            report += "| Env Var | Files | Occurrence Count |\n"
+            report += "|---------|-------|------------------|\n"
+            for var_name, files in sorted(env_var_names.items()):
+                unique_files = list(set(files))
+                occurrence_count = len(files)
+                file_list = ", ".join(unique_files[:3])
+                if len(unique_files) > 3:
+                    file_list += f" ... ({len(unique_files) - 3} more)"
+                report += f"| {var_name} | {file_list} | {occurrence_count} |\n"
+            report += "\n"
 
         report += "## Logging Patterns\n\n"
 
@@ -836,8 +915,31 @@ class AuditGenerator:
 
         report += "\n## Potential Duplication Candidates\n\n"
 
-        if duplications:
-            for dup in duplications:
+        duplications_data = duplications
+        duplication_table = duplications_data.get('duplication_table', [])
+        dunder_summary = duplications_data.get('dunder_summary', [])
+        
+        if duplication_table:
+            report += "### Function Duplication Table\n\n"
+            report += "| Function Name | File Count | File Paths |\n"
+            report += "|---------------|------------|------------|\n"
+            for dup in duplication_table:
+                report += f"| {dup['function_name']} | {dup['unique_file_count']} | {dup['file_paths']} |\n"
+            report += "\n"
+        
+        if dunder_summary:
+            report += "### Dunder Methods Summary\n\n"
+            report += "| Method Name | File Count | File Paths |\n"
+            report += "|-------------|------------|------------|\n"
+            for dunder in dunder_summary:
+                report += f"| {dunder['method_name']} | {dunder['unique_file_count']} | {dunder['file_paths']} |\n"
+            report += "\n"
+
+        # Keep legacy format for backward compatibility
+        duplications_list = duplications_data.get('duplications', [])
+        if duplications_list:
+            report += "### Legacy Format\n"
+            for dup in duplications_list[:10]:  # Limit display
                 report += f"- {dup}\n"
         else:
             report += "No obvious duplication candidates detected.\n"
