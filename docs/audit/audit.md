@@ -74,7 +74,7 @@ cloc not available - install with: apt-get install cloc
 - aixterm/mcp_client.py: 26.3 KB
 - aixterm/config.py: 23.9 KB
 - aixterm/integration/README.md: 22.5 KB
-- docs/audit/audit.md: 22.1 KB
+- docs/audit/audit.md: 22.0 KB
 
 ## Dependency Inventory
 
@@ -446,7 +446,7 @@ No large commented-out code blocks detected.
 - Large file: aixterm/mcp_client.py (26963 bytes)
 - Large file: aixterm/config.py (24431 bytes)
 - Large file: aixterm/integration/README.md (23064 bytes)
-- Large file: docs/audit/audit.md (22637 bytes)
+- Large file: docs/audit/audit.md (22573 bytes)
 - High annotation count: aixterm/plugins/devteam/modules/task_manager.py (15 TODOs/FIXMEs)
 - High annotation count: aixterm/plugins/devteam/modules/events.py (6 TODOs/FIXMEs)
 - High annotation count: scripts/generate_audit.py (6 TODOs/FIXMEs)
