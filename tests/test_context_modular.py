@@ -8,10 +8,7 @@ from unittest.mock import Mock, patch
 class TestModularTerminalContext:
     """Test cases for the modular TerminalContext class."""
 
-    # NOTE: All fixture-dependent code must remain inside test methods. Ensure no log_dir
-    # or mock_home_dir usages appear at class scope after indentation fixes above.
-    # (Cleaned stray occurrences.)
-    # Verified: no class-scope fixture references remain.
+    # All fixture-dependent code must remain inside test methods - no class scope fixture usage
 
     def test_get_terminal_context_with_log(self, context_manager, sample_log_file):
         """Test getting terminal context with existing log file."""

@@ -12,22 +12,7 @@ class Bash(BaseIntegration):
 
     def __init__(self) -> None:
         """Initialize bash integration."""
-
-        # Create a mock logger that does nothing
-        class NullLogger:
-            def debug(self, msg: str) -> None:
-                pass
-
-            def info(self, msg: str) -> None:
-                pass
-
-            def warning(self, msg: str) -> None:
-                pass
-
-            def error(self, msg: str) -> None:
-                pass
-
-        super().__init__(NullLogger())
+        super().__init__()
 
     @property
     def shell_name(self) -> str:
