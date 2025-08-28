@@ -8,7 +8,11 @@ from .base import BaseIntegration
 
 
 class Zsh(BaseIntegration):
-    """Zsh shell integration handler."""
+    """Zsh shell integration handler.
+    
+    Uses default implementations from BaseIntegration for is_available(),
+    validate_integration_environment(), and get_current_shell_version().
+    """
 
     def __init__(self) -> None:
         """Initialize zsh integration."""
@@ -386,10 +390,6 @@ export _AIXTERM_INTEGRATION_LOADED=1
     echo ""
 } >> "$(_aixterm_get_log_file)" 2>/dev/null
 """
-
-    # Note: is_available() and validate_integration_environment() now use 
-    # default implementations from BaseIntegration. get_current_shell_version() 
-    # also uses the default implementation.
 
     def get_installation_notes(self) -> List[str]:
         """Return zsh-specific installation notes."""

@@ -313,8 +313,11 @@ class DevTeamPlugin(Plugin):
             return {"success": False, "error": f"Unknown test command: {command}"}
 
     def _start_background_tasks(self) -> None:
-        """Start background tasks."""
-        # Python 3.12+: asyncio.get_event_loop() is deprecated when no loop running.
+        """Start background tasks.
+        
+        Note: asyncio.get_event_loop() is deprecated in Python 3.12+ when no loop 
+        is running, so we first try to get the running loop.
+        """
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
