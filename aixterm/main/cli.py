@@ -322,7 +322,8 @@ def main() -> None:
         client = AIxTermClient(config_path=args.config)
         # Pass user's stream preference through
         stream_flag = not getattr(args, "no_stream", False)
-        response = client.query(query_text, stream=stream_flag)
+        debug_flag = getattr(args, "debug", False)
+        response = client.query(query_text, stream=stream_flag, debug=debug_flag)
         if response.get("status") != "success":
             err = response.get("error", {})
             print(f"Error: {err.get('message', 'Unknown error')}")
@@ -334,6 +335,89 @@ def main() -> None:
             return
         result = response.get("result", {})
         content = result if isinstance(result, str) else result.get("content", "")
+        
+        # Show debug information if present
+        if isinstance(result, dict) and "debug" in result:
+            print("\n" + "="*50)
+            print("DEBUG INFORMATION")
+            print("="*50)
+            
+            debug_info = result["debug"]
+            
+            # Show request information
+            if "request" in debug_info:
+                print("\nLLM API REQUEST:")
+                print("-" * 20)
+                req = debug_info["request"]
+                print(f"Model: {req.get('model')}")
+                print(f"Stream: {req.get('stream')}")
+                print(f"Messages ({len(req.get('messages', []))} total):")
+                for i, msg in enumerate(req.get("messages", [])[:3]):  # Show first 3 messages
+                    role = msg.get("role", "unknown")
+                    content_preview = str(msg.get("content", ""))[:100]
+                    if len(str(msg.get("content", ""))) > 100:
+                        content_preview += "..."
+                    print(f"  [{i+1}] {role}: {content_preview}")
+                if len(req.get("messages", [])) > 3:
+                    print(f"  ... and {len(req.get('messages', [])) - 3} more messages")
+                
+                if req.get("tools"):
+                    print(f"Tools: {len(req['tools'])} tools available")
+                    print(f"Tool Choice: {req.get('tool_choice')}")
+                
+            # Show request metadata
+            if "request_metadata" in debug_info:
+                print("\nREQUEST METADATA:")
+                print("-" * 20)
+                meta = debug_info["request_metadata"]
+                print(f"Message Count: {meta.get('message_count')}")
+                print(f"Tool Count: {meta.get('tool_count')}")
+                print(f"Total Message Characters: {meta.get('total_message_chars')}")
+                print(f"Estimated Tokens: {meta.get('estimated_tokens')}")
+            
+            # Show response information
+            if "response" in debug_info:
+                print("\nLLM API RESPONSE:")
+                print("-" * 20)
+                resp = debug_info["response"]
+                if resp.get("type") == "stream":
+                    print(resp.get("note", "Streaming response"))
+                else:
+                    print(f"Response ID: {resp.get('id')}")
+                    print(f"Model: {resp.get('model')}")
+                    print(f"Created: {resp.get('created')}")
+                    
+                    if resp.get("usage"):
+                        usage = resp["usage"]
+                        print(f"Token Usage:")
+                        print(f"  Prompt tokens: {usage.get('prompt_tokens')}")
+                        print(f"  Completion tokens: {usage.get('completion_tokens')}")
+                        print(f"  Total tokens: {usage.get('total_tokens')}")
+                    
+                    choices = resp.get("choices", [])
+                    if choices:
+                        choice = choices[0]
+                        print(f"Finish Reason: {choice.get('finish_reason')}")
+                        message = choice.get("message", {})
+                        content_preview = str(message.get("content", ""))[:200]
+                        if len(str(message.get("content", ""))) > 200:
+                            content_preview += "..."
+                        print(f"Content Preview: {content_preview}")
+                        
+                        if message.get("tool_calls"):
+                            print(f"Tool Calls: {len(message['tool_calls'])} calls made")
+            
+            # Show error information if present
+            if "error" in debug_info:
+                print("\nERROR INFORMATION:")
+                print("-" * 20)
+                error = debug_info["error"]
+                print(f"Error Type: {error.get('type')}")
+                print(f"Error Message: {error.get('message')}")
+            
+            print("="*50)
+            print()
+        
         if content:
             print(content)
         else:
