@@ -9,6 +9,7 @@ from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Type
 
 from .base import AbstractAgentBase
+from ...lifecycle import LifecycleManager
 
 logger = logging.getLogger(__name__)
 
@@ -126,18 +127,13 @@ class AgentRegistry:
         Returns:
             True if all agents were shutdown successfully, False otherwise.
         """
-        success = True
-
-        for agent_type, agent in list(self.agents.items()):
-            try:
-                if agent.shutdown():
-                    del self.agents[agent_type]
-                else:
-                    success = False
-            except Exception as e:
-                self.logger.error(f"Error shutting down agent {agent_type}: {e}")
-                success = False
-
+        lifecycle_manager = LifecycleManager(self.logger)
+        success = lifecycle_manager.shutdown_registry(self.agents, "agents")
+        
+        # Clear the registry after successful shutdown
+        if success:
+            self.agents.clear()
+            
         return success
 
 
