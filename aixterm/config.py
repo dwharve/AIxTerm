@@ -18,9 +18,6 @@ class AIxTermConfig:
     '~/.aixterm/config'.
     """
 
-    # Legacy default (home) retained only for migration; not used when None passed
-    LEGACY_HOME_PATH = Path.home() / ".aixterm"
-
     def __init__(self, config_path: Optional[Path] = None):
         """Initialize configuration manager.
 

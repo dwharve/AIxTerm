@@ -261,9 +261,4 @@ def create_default_registry(plugin) -> AgentRegistry:
     registry.register_agent_class(DeveloperAgent)
     registry.register_agent_class(QATesterAgent)
 
-    # TODO: Register other agents as they're implemented
-    # - ArchitectAgent
-    # - ReviewerAgent
-    # - DocumentationAgent
-
     return registry
