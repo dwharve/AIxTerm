@@ -96,6 +96,12 @@ ci: test quality-check
 fix: format import-sort
 	@echo "Code formatting and import sorting applied!"
 
+# Audit and analysis
+.PHONY: audit-baseline
+audit-baseline:
+	@echo "Generating repository audit baseline..."
+	$(PYTHON) scripts/generate_audit.py
+
 # Virtual environment management
 .PHONY: venv
 venv:
@@ -418,6 +424,7 @@ help:
 	@echo "  quality-check    - Run all quality checks"
 	@echo "  ci               - Run CI pipeline (tests + quality)"
 	@echo "  fix              - Fix formatting and imports"
+	@echo "  audit-baseline   - Generate repository audit baseline"
 	@echo ""
 	@echo "Environment targets:"
 	@echo "  venv             - Set up virtual environment"
