@@ -1,4 +1,4 @@
-"""Tests for TTY log processing with new ~/.aixterm/tty layout (no legacy)."""
+"""Tests for TTY log processing with new ~/.aixterm/tty layout."""
 
 import os
 import tempfile

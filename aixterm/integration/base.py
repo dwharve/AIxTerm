@@ -297,7 +297,7 @@ class BaseIntegration(ABC):
                         j += 1
                     i = j
                     continue
-                # Legacy snippet patterns that might lack variable or marker handling
+                # Old snippet patterns that might lack variable or marker handling
                 if rc_ref in line or "AIXTERM_RC=\"$HOME/.aixterm/" in line:
                     # Attempt to skip an enclosing if block if present (line may be 'if [ -f ...')
                     j = i + 1
@@ -309,7 +309,7 @@ class BaseIntegration(ABC):
                         j += 1
                     i = j
                     continue
-                # Fallback legacy source comment line
+                # Fallback old source comment line
                 if line.startswith("# Source AIxTerm "):
                     i += 1
                     continue
@@ -326,20 +326,6 @@ class BaseIntegration(ABC):
         except Exception as e:  # pragma: no cover - defensive
             self.logger.error(f"Error removing existing integration: {e}")
             return False
-
-    def _install_integration_code(self, config_file: Path) -> bool:
-        """Install the integration code to config file.
-
-        Args:
-            config_file: Path to config file
-
-        Returns:
-            True if installation successful
-        """
-        # Legacy method retained for backward compatibility; now a no-op since
-        # installation is handled via rc file + sourcing snippet.
-        print(" Deprecated inline installation path invoked; no action taken.")
-        return True
 
     def get_status(self) -> dict[str, Any]:
         """Get integration installation status for this shell.

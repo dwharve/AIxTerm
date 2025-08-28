@@ -713,7 +713,7 @@ class AuditGenerator:
         for ann_type, count in annotation_counts.items():
             if count > 5:  # Significant number of annotations
                 self.add_finding(
-                    category="Legacy/Dead" if ann_type in [
+                    category="Dead Code" if ann_type in [
                         'DEPRECATED', 'LEGACY'] else "Inconsistency",
                     evidence=f"{count} {ann_type} annotations across codebase",
                     impact="Med",
@@ -955,12 +955,6 @@ class AuditGenerator:
                 report += f"| {dunder['method_name']} | {dunder['unique_file_count']} | {dunder['file_paths']} |\n"
             report += "\n"
 
-        # Keep legacy format for backward compatibility
-        duplications_list = duplications_data.get('duplications', [])
-        if duplications_list:
-            report += "### Legacy Format\n"
-            for dup in duplications_list[:10]:  # Limit display
-                report += f"- {dup}\n"
         else:
             report += "No obvious duplication candidates detected.\n"
 

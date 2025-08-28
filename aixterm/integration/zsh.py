@@ -287,7 +287,7 @@ aixterm_toggle_minimal_logging() {
     fi
 }
 
-# Function to enable legacy minimal logging mode
+# Function to enable minimal logging mode
 aixterm_minimal_logging() {
     export _AIXTERM_MINIMAL_MODE=1
     echo "AIxTerm: Switched to minimal logging mode (commands only)"

@@ -26,7 +26,7 @@ class ServiceServer:
         self.service = service
         from ..runtime_paths import get_socket_path
 
-        # Maintain compatibility with any legacy server config keys
+        # Load server configuration
         self.config = service.config.get("server", {})
         self.socket_path = str(get_socket_path())
         self.socket: socket.socket | None = None

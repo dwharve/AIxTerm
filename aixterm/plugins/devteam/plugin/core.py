@@ -254,7 +254,7 @@ class DevTeamPlugin(Plugin):
         parameters = request.get("parameters", {})
 
         if command == "devteam:submit":
-            # Legacy format for tests
+            # Format for tests
             task_id = f"task_{uuid.uuid4().hex[:8]}"
             self._active_tasks[task_id] = {
                 "title": parameters.get("title", "Untitled Task"),
@@ -266,7 +266,7 @@ class DevTeamPlugin(Plugin):
             self._task_status[task_id] = TaskStatus.SUBMITTED
             return {"success": True, "task_id": task_id, "status": "submitted"}
         elif command == "devteam:list":
-            # Legacy format for tests
+            # Format for tests
             tasks = []
             for task_id, task in self._active_tasks.items():
                 tasks.append(
