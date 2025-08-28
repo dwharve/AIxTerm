@@ -65,8 +65,8 @@ cloc not available - install with: apt-get install cloc
 - .typed: 1 files
 
 #### Largest Files
-- scripts/generate_audit.py: 39.8 KB
 - tests/test_integration.py: 38.8 KB
+- scripts/generate_audit.py: 38.1 KB
 - aixterm/plugins/devteam/modules/workflow_engine.py: 31.0 KB
 - aixterm/README.md: 29.7 KB
 - tests/test_mcp_progress_notifications.py: 28.6 KB
@@ -338,6 +338,7 @@ No GitHub workflows found.
 |------|------|------|-------------|
 | aixterm/integration/base.py | 341 | DEPRECATED | inline installation path invoked; no action taken.") |
 | aixterm/plugins/devteam/plugin/core.py | 317 | DEPRECATED | when no loop running. |
+| scripts/generate_audit.py | 646 | DEPRECATED | ', 'LEGACY'] else "Inconsistency", |
 | aixterm/client/README.md | 11 | LEGACY | HTTP transport support has been removed – the application now auto-starts |
 | aixterm/config.py | 3 | LEGACY | HTTP code paths have |
 | aixterm/config.py | 21 | LEGACY | default (home) retained only for migration; not used when None passed |
@@ -359,13 +360,12 @@ No GitHub workflows found.
 | aixterm/plugins/devteam/plugin/core.py | 269 | LEGACY | format for tests |
 | aixterm/service/server.py | 29 | LEGACY | server config keys |
 | docs/audit/README.md | 44 | LEGACY | /Dead**: Code that may be outdated or unused |
-| scripts/generate_audit.py | 632 | LEGACY | /Dead" if ann_type in ['DEPRECATED', 'LEGACY'] else "Inconsistency", |
+| scripts/generate_audit.py | 645 | LEGACY | /Dead" if ann_type in [ |
 | tests/test_log_processor_tty.py | 1 | LEGACY | ).""" |
 | README.md | 85 | NOTE | **: AIxTerm provides two command aliases after installation: |
 | aixterm/context/terminal_context.py | 318 | NOTE | This is a fallback when shell integration is not available. |
 | aixterm/llm/client/requests.py | 230 | NOTE | ": "Streaming response not captured in debug"} |
 | aixterm/main/cli.py | 384 | NOTE | ", "Streaming response")) |
-| aixterm/plugins/devteam/modules/task_manager.py | 204 | NOTE | str, author: str = "system") -> None: |
 
 ## Commented-Out Code Blocks
 
@@ -437,8 +437,8 @@ No large commented-out code blocks detected.
 
 ## Risk & Maintenance Hotspots
 
-- Large file: scripts/generate_audit.py (40780 bytes)
 - Large file: tests/test_integration.py (39715 bytes)
+- Large file: scripts/generate_audit.py (39034 bytes)
 - Large file: aixterm/plugins/devteam/modules/workflow_engine.py (31696 bytes)
 - Large file: aixterm/README.md (30441 bytes)
 - Large file: tests/test_mcp_progress_notifications.py (29244 bytes)
@@ -446,17 +446,17 @@ No large commented-out code blocks detected.
 - Large file: aixterm/mcp_client.py (26963 bytes)
 - Large file: aixterm/config.py (24431 bytes)
 - Large file: aixterm/integration/README.md (23064 bytes)
-- Large file: docs/audit/audit.md (22646 bytes)
+- Large file: docs/audit/audit.md (22637 bytes)
 - High annotation count: aixterm/plugins/devteam/modules/task_manager.py (15 TODOs/FIXMEs)
 - High annotation count: aixterm/plugins/devteam/modules/events.py (6 TODOs/FIXMEs)
-- High annotation count: scripts/generate_audit.py (5 TODOs/FIXMEs)
+- High annotation count: scripts/generate_audit.py (6 TODOs/FIXMEs)
 - High annotation count: aixterm/integration/base.py (4 TODOs/FIXMEs)
 - High annotation count: tests/test_shell_integration.py (4 TODOs/FIXMEs)
 - Complex module: aixterm/config.py (656 lines, 1 classes, 24 functions)
 - Complex module: aixterm/mcp_client.py (751 lines, 5 classes, 27 functions)
 - Complex module: aixterm/plugins/devteam/modules/workflow_engine.py (943 lines, 6 classes, 21 functions)
 - Complex module: aixterm/plugins/devteam/modules/task_manager.py (649 lines, 2 classes, 28 functions)
-- Complex module: scripts/generate_audit.py (979 lines, 1 classes, 23 functions)
+- Complex module: scripts/generate_audit.py (996 lines, 1 classes, 23 functions)
 - Complex module: tests/test_integration.py (953 lines, 6 classes, 38 functions)
 - Complex module: tests/test_context.py (513 lines, 5 classes, 33 functions)
 - Complex module: tests/test_mcp_progress_notifications.py (831 lines, 5 classes, 54 functions)
