@@ -271,11 +271,17 @@ class AuditGenerator:
         }
 
         # Patterns to extract specific environment variable names
+        # Handle all patterns mentioned: os.getenv('X'), os.environ.get('X'), os.environ['X'], os.environ.get("X")
+        # Plus assignment of env-derived values
         env_var_patterns = [
             r'os\.getenv\(["\']([^"\']+)["\']',
             r'os\.environ\[["\']([^"\']+)["\']\]',
             r'os\.environ\.get\(["\']([^"\']+)["\']',
-            r'getenv\(["\']([^"\']+)["\']'
+            r'getenv\(["\']([^"\']+)["\']',
+            # Assignment patterns for env-derived values
+            r'=\s*os\.getenv\(["\']([^"\']+)["\']',
+            r'=\s*os\.environ\[["\']([^"\']+)["\']\]',
+            r'=\s*os\.environ\.get\(["\']([^"\']+)["\']'
         ]
 
         for root, dirs, files in os.walk(self.repo_root):
@@ -324,6 +330,8 @@ class AuditGenerator:
             'logger_instances': r'(?:logger\s*=\s*)?logging\.getLogger\(',
             'direct_logging_calls': r'logging\.(debug|info|warn|warning|error|critical)\(',
             'module_loggers': r'__name__.*getLogger',
+            # Add specific pattern for logger.getLogger invocations as requested
+            'logger_getlogger_invocations': r'logger\.getLogger\(',
         }
 
         for root, dirs, files in os.walk(self.repo_root):
@@ -585,7 +593,9 @@ class AuditGenerator:
         return {
             'duplications': duplications[:20],  # Limit to top 20 for backward compatibility
             'duplication_table': sorted(duplication_table, key=lambda x: x['unique_file_count'], reverse=True)[:20],
-            'dunder_summary': sorted(dunder_summary, key=lambda x: x['unique_file_count'], reverse=True)[:10]
+            'dunder_summary': sorted(dunder_summary, key=lambda x: x['unique_file_count'], reverse=True)[:10],
+            'total_distinct_duplication_candidates': len(duplication_table),
+            'total_distinct_dunder_methods': len(dunder_summary)
         }
 
     def analyze_test_coverage_surface(self) -> Dict[str, Any]:
@@ -918,9 +928,17 @@ class AuditGenerator:
         duplications_data = duplications
         duplication_table = duplications_data.get('duplication_table', [])
         dunder_summary = duplications_data.get('dunder_summary', [])
+        total_candidates = duplications_data.get('total_distinct_duplication_candidates', 0)
+        total_dunders = duplications_data.get('total_distinct_dunder_methods', 0)
+        
+        # Add summary statistics
+        if total_candidates > 0 or total_dunders > 0:
+            report += f"**Summary:** {total_candidates} distinct function duplication candidates, {total_dunders} distinct dunder method patterns.\n\n"
         
         if duplication_table:
             report += "### Function Duplication Table\n\n"
+            if len(duplication_table) < total_candidates:
+                report += f"*Showing top {len(duplication_table)} of {total_candidates} total candidates*\n\n"
             report += "| Function Name | File Count | File Paths |\n"
             report += "|---------------|------------|------------|\n"
             for dup in duplication_table:
@@ -929,6 +947,8 @@ class AuditGenerator:
         
         if dunder_summary:
             report += "### Dunder Methods Summary\n\n"
+            if len(dunder_summary) < total_dunders:
+                report += f"*Showing top {len(dunder_summary)} of {total_dunders} total dunder method patterns*\n\n"
             report += "| Method Name | File Count | File Paths |\n"
             report += "|-------------|------------|------------|\n"
             for dunder in dunder_summary:
