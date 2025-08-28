@@ -20,20 +20,10 @@ class ProjectManagerAgent(Agent):
     - Resource allocation
     """
 
-    @property
-    def agent_type(self) -> str:
-        """Get the agent type."""
-        return "project_manager"
-
-    @property
-    def name(self) -> str:
-        """Get the agent name."""
-        return "Project Manager"
-
-    @property
-    def description(self) -> str:
-        """Get the agent description."""
-        return "Plans, prioritizes, and coordinates development tasks"
+    # Declarative agent attributes (eliminates boilerplate property methods)
+    _agent_type = "project_manager"
+    _name = "Project Manager"
+    _description = "Plans, prioritizes, and coordinates development tasks"
 
     async def process_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
         """

@@ -5,18 +5,22 @@ This module provides the base classes and registry for AI agents in the DevTeam 
 """
 
 import logging
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Any, Dict, List, Optional, Type
+
+from .base import AbstractAgentBase
 
 logger = logging.getLogger(__name__)
 
 
-class Agent(ABC):
+class Agent(AbstractAgentBase):
     """
     Base class for all AI agents in the DevTeam plugin.
 
     Agents are specialized AI components that handle specific roles in the software
     development process, such as project management, architecture, coding, etc.
+    
+    This class now inherits from AbstractAgentBase to eliminate duplication.
     """
 
     def __init__(self, plugin):
@@ -26,115 +30,15 @@ class Agent(ABC):
         Args:
             plugin: The DevTeam plugin instance.
         """
-        self.plugin = plugin
+        super().__init__(plugin)
+        # Update logger format to match existing pattern
         self.logger = logging.getLogger(
             f"aixterm.plugin.devteam.agent.{self.agent_type}"
         )
         self.config = self._get_agent_config()
-        self.initialized = False
 
-    @property
-    @abstractmethod
-    def agent_type(self) -> str:
-        """
-        Get the agent type.
-
-        Returns:
-            The agent type identifier.
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """
-        Get the agent name.
-
-        Returns:
-            The human-readable agent name.
-        """
-        pass
-
-    @property
-    def version(self) -> str:
-        """
-        Get the agent version.
-
-        Returns:
-            The agent version string.
-        """
-        return "0.1.0"
-
-    @property
-    def description(self) -> str:
-        """
-        Get the agent description.
-
-        Returns:
-            The agent description.
-        """
-        return f"{self.name} agent for DevTeam"
-
-    def initialize(self) -> bool:
-        """
-        Initialize the agent.
-
-        Returns:
-            True if initialization was successful, False otherwise.
-        """
-        self.logger.debug(f"Initializing agent: {self.agent_type}")
-        self.initialized = True
-        return True
-
-    def shutdown(self) -> bool:
-        """
-        Shutdown the agent.
-
-        Returns:
-            True if shutdown was successful, False otherwise.
-        """
-        self.logger.debug(f"Shutting down agent: {self.agent_type}")
-        self.initialized = False
-        return True
-
-    @abstractmethod
-    async def process_task(self, task: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Process a task.
-
-        Args:
-            task: The task to process.
-
-        Returns:
-            The processing result.
-        """
-        pass
-
-    def _get_agent_config(self) -> Dict[str, Any]:
-        """
-        Get agent configuration.
-
-        Returns:
-            The agent configuration.
-        """
-        default_config = {
-            "enabled": True,
-            "max_tasks": 5,
-        }
-
-        try:
-            plugin_config = self.plugin._plugin_config
-            agents_config = plugin_config.get("agents", {})
-            agent_config = agents_config.get(self.agent_type, {})
-
-            # Merge default and user config
-            config = default_config.copy()
-            config.update(agent_config)
-
-            return config
-        except Exception as e:
-            self.logger.error(f"Error getting agent config: {e}")
-            return default_config
+    # Note: agent_type, name, version, description, initialize, shutdown, 
+    # process_task, and _get_agent_config are now inherited from AbstractAgentBase
 
 
 class AgentRegistry:
