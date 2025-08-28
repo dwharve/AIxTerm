@@ -998,12 +998,12 @@ class AuditGenerator:
 
         # Extract quality gates from Makefile
         quality_gates = []
-        if 'quality-check' in makefile_targets:
+        if 'quality-check' in data['makefile_targets']:
             quality_gates.append(
                 "quality-check (format-check, lint, type-check, import-check, security-check)")
-        if 'test' in makefile_targets:
+        if 'test' in data['makefile_targets']:
             quality_gates.append("test (pytest)")
-        if 'ci' in makefile_targets:
+        if 'ci' in data['makefile_targets']:
             quality_gates.append("ci (test + quality-check)")
 
         if quality_gates:
