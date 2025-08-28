@@ -49,11 +49,11 @@ cloc not available - install with: apt-get install cloc
 
 ### File Distribution
 
-- **Total Files:** 171
+- **Total Files:** 172
 - **Total Size:** 1.4 MB
 
 #### By File Type
-- .py: 119 files
+- .py: 120 files
 - .md: 37 files
 - no_extension: 6 files
 - .txt: 2 files
@@ -72,7 +72,7 @@ cloc not available - install with: apt-get install cloc
 - tests/test_mcp_progress_notifications.py: 28.6 KB
 - ARCHITECTURE.md: 27.6 KB
 - aixterm/mcp_client.py: 26.3 KB
-- docs/audit/audit.md: 24.1 KB
+- docs/audit/audit.md: 24.3 KB
 - aixterm/config.py: 23.9 KB
 - tests/test_task_manager_characterization.py: 23.3 KB
 
@@ -197,7 +197,7 @@ No GitHub workflows found.
 
 | Env Var | Files | Occurrence Count |
 |---------|-------|------------------|
-| AIXTERM_LOG_LEVEL | aixterm/main/cli.py, aixterm/utils.py | 3 |
+| AIXTERM_LOG_LEVEL | aixterm/utils.py, aixterm/main/cli.py | 3 |
 | AIXTERM_RUNTIME_HOME | aixterm/runtime_paths.py | 2 |
 | AIXTERM_SHOW_TIMING | aixterm/display/status.py | 1 |
 | AIXTERM_TEST_IDLE_GRACE | aixterm/service/service.py | 1 |
@@ -392,9 +392,9 @@ No GitHub workflows found.
 | scripts/generate_audit.py | 716 | LEGACY | /Dead" if ann_type in [ |
 | scripts/generate_audit.py | 958 | LEGACY | format for backward compatibility |
 | scripts/generate_audit.py | 961 | LEGACY | Format\n" |
+| tests/test_events_characterization.py | 50 | LEGACY | and new) |
 | tests/test_log_processor_tty.py | 1 | LEGACY | ).""" |
 | README.md | 85 | NOTE | **: AIxTerm provides two command aliases after installation: |
-| aixterm/context/terminal_context.py | 318 | NOTE | This is a fallback when shell integration is not available. |
 
 ## Commented-Out Code Blocks
 
@@ -402,56 +402,56 @@ No large commented-out code blocks detected.
 
 ## Potential Duplication Candidates
 
-**Summary:** 125 distinct function duplication candidates, 1 distinct dunder method patterns.
+**Summary:** 126 distinct function duplication candidates, 1 distinct dunder method patterns.
 
 ### Function Duplication Table
 
-*Showing top 20 of 125 total candidates*
+*Showing top 20 of 126 total candidates*
 
 | Function Name | File Count | File Paths |
 |---------------|------------|------------|
-| name | 10 | tests/test_plugins.py, tests/test_plugin_service.py, aixterm/plugins/base.py, tests/test_devteam_agents.py, aixterm/plugins/devteam/agents/project_manager.py, aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/agents/qa_tester.py, aixterm/plugins/devteam/agents/code_analyst.py ... (2 more) |
-| shutdown | 9 | aixterm/cleanup.py, aixterm/plugins/base.py, aixterm/main/__init__.py, aixterm/llm/client/base.py, aixterm/mcp_client.py, aixterm/context/terminal_context.py, aixterm/plugins/devteam/agents/__init__.py, aixterm/main/app.py ... (1 more) |
-| status | 8 | aixterm/service/installer/linux.py, aixterm/plugins/base.py, aixterm/main/__init__.py, aixterm/client/client.py, aixterm/service/installer/windows.py, aixterm/service/installer/macos.py, aixterm/service/service.py, aixterm/service/installer/common.py |
-| description | 7 | aixterm/plugins/base.py, aixterm/plugins/devteam/agents/project_manager.py, aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/agents/qa_tester.py, aixterm/plugins/devteam/agents/code_analyst.py, aixterm/plugins/devteam/agents/developer.py, aixterm/plugins/devteam/plugin/core.py |
-| install | 6 | aixterm/service/installer/linux.py, aixterm/service/installer/windows.py, aixterm/service/installer/macos.py, aixterm/integration/base.py, aixterm/service/installer/common.py, aixterm/integration/fish.py |
-| agent_type | 6 | tests/test_devteam_agents.py, aixterm/plugins/devteam/agents/project_manager.py, aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/agents/qa_tester.py, aixterm/plugins/devteam/agents/code_analyst.py, aixterm/plugins/devteam/agents/developer.py |
-| process_task | 6 | tests/test_devteam_agents.py, aixterm/plugins/devteam/agents/project_manager.py, aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/agents/qa_tester.py, aixterm/plugins/devteam/agents/code_analyst.py, aixterm/plugins/devteam/agents/developer.py |
-| initialize | 5 | aixterm/plugins/base.py, aixterm/mcp_client.py, aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/adaptive.py, aixterm/plugins/devteam/plugin/core.py |
-| debug | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| info | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| warning | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| error | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| shell_name | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| config_files | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| generate_integration_code | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| is_available | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| validate_integration_environment | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| get_installation_notes | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| get_troubleshooting_tips | 5 | tests/test_shell_integration.py, aixterm/integration/base.py, aixterm/integration/zsh.py, aixterm/integration/fish.py, aixterm/integration/bash.py |
-| uninstall | 5 | aixterm/service/installer/linux.py, aixterm/service/installer/windows.py, aixterm/service/installer/macos.py, aixterm/integration/base.py, aixterm/service/installer/common.py |
+| name | 10 | aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/plugin/core.py, tests/test_plugins.py, aixterm/plugins/devteam/agents/qa_tester.py, aixterm/plugins/base.py, tests/test_devteam_agents.py, tests/test_plugin_service.py, aixterm/plugins/devteam/agents/code_analyst.py ... (2 more) |
+| shutdown | 9 | aixterm/plugins/devteam/agents/__init__.py, aixterm/main/app.py, aixterm/main/__init__.py, aixterm/plugins/base.py, aixterm/llm/client/base.py, aixterm/context/terminal_context.py, aixterm/display/manager.py, aixterm/cleanup.py ... (1 more) |
+| status | 8 | aixterm/main/__init__.py, aixterm/plugins/base.py, aixterm/service/installer/windows.py, aixterm/service/service.py, aixterm/service/installer/linux.py, aixterm/service/installer/common.py, aixterm/service/installer/macos.py, aixterm/client/client.py |
+| description | 7 | aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/plugin/core.py, aixterm/plugins/devteam/agents/qa_tester.py, aixterm/plugins/base.py, aixterm/plugins/devteam/agents/code_analyst.py, aixterm/plugins/devteam/agents/developer.py, aixterm/plugins/devteam/agents/project_manager.py |
+| install | 6 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/service/installer/windows.py, aixterm/service/installer/linux.py, aixterm/service/installer/common.py, aixterm/service/installer/macos.py |
+| agent_type | 6 | aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/agents/qa_tester.py, tests/test_devteam_agents.py, aixterm/plugins/devteam/agents/code_analyst.py, aixterm/plugins/devteam/agents/developer.py, aixterm/plugins/devteam/agents/project_manager.py |
+| process_task | 6 | aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/agents/qa_tester.py, tests/test_devteam_agents.py, aixterm/plugins/devteam/agents/code_analyst.py, aixterm/plugins/devteam/agents/developer.py, aixterm/plugins/devteam/agents/project_manager.py |
+| initialize | 5 | aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/plugin/core.py, aixterm/plugins/base.py, aixterm/plugins/devteam/adaptive.py, aixterm/mcp_client.py |
+| debug | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| info | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| warning | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| error | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| shell_name | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| config_files | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| generate_integration_code | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| is_available | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| validate_integration_environment | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| get_installation_notes | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| get_troubleshooting_tips | 5 | aixterm/integration/fish.py, aixterm/integration/base.py, aixterm/integration/zsh.py, tests/test_shell_integration.py, aixterm/integration/bash.py |
+| uninstall | 5 | aixterm/integration/base.py, aixterm/service/installer/windows.py, aixterm/service/installer/common.py, aixterm/service/installer/linux.py, aixterm/service/installer/macos.py |
 
 ### Dunder Methods Summary
 
 | Method Name | File Count | File Paths |
 |-------------|------------|------------|
-| __init__ | 57 | aixterm/llm/client/base.py, aixterm/llm/message_validator.py, aixterm/llm/client/tools.py, aixterm/display/status.py, aixterm/plugins/devteam/agents/__init__.py ... (52 more) |
+| __init__ | 57 | aixterm/context/tool_optimizer.py, aixterm/main/tools_manager.py, aixterm/llm/client/context.py, aixterm/plugins/service.py, aixterm/context/terminal_context.py ... (52 more) |
 
 ### Legacy Format
-- Function '_get_default_config' appears in: aixterm/config.py, aixterm/plugins/devteam/modules/config.py
-- Function 'config' appears in: tests/test_mcp_client.py, aixterm/config.py, tests/test_log_processor_tty.py
-- Function 'initialize' appears in: aixterm/plugins/base.py, aixterm/mcp_client.py, aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/adaptive.py, aixterm/plugins/devteam/plugin/core.py
+- Function '_get_default_config' appears in: aixterm/plugins/devteam/modules/config.py, aixterm/config.py
+- Function 'config' appears in: tests/test_log_processor_tty.py, tests/test_mcp_client.py, aixterm/config.py
+- Function 'initialize' appears in: aixterm/plugins/devteam/agents/__init__.py, aixterm/plugins/devteam/plugin/core.py, aixterm/plugins/base.py, aixterm/plugins/devteam/adaptive.py, aixterm/mcp_client.py
 - Function 'call_tool' appears in: aixterm/mcp_client.py
-- Function 'shutdown' appears in: aixterm/cleanup.py, aixterm/plugins/base.py, aixterm/main/__init__.py, aixterm/llm/client/base.py, aixterm/mcp_client.py, aixterm/context/terminal_context.py, aixterm/plugins/devteam/agents/__init__.py, aixterm/main/app.py, aixterm/display/manager.py
-- Function 'list_tools' appears in: aixterm/main/tools_manager.py, aixterm/mcp_client.py, aixterm/main/__init__.py
-- Function 'start' appears in: aixterm/service/server.py, aixterm/service/service.py, aixterm/mcp_client.py, aixterm/plugins/devteam/workflow.py
-- Function 'stop' appears in: aixterm/service/server.py, aixterm/mcp_client.py, aixterm/service/service.py
-- Function 'get_uptime' appears in: aixterm/mcp_client.py, aixterm/service/service.py
-- Function 'cleanup_now' appears in: aixterm/main/status_manager.py, aixterm/main/__init__.py
+- Function 'shutdown' appears in: aixterm/plugins/devteam/agents/__init__.py, aixterm/main/app.py, aixterm/main/__init__.py, aixterm/plugins/base.py, aixterm/llm/client/base.py, aixterm/context/terminal_context.py, aixterm/display/manager.py, aixterm/cleanup.py, aixterm/mcp_client.py
+- Function 'list_tools' appears in: aixterm/main/tools_manager.py, aixterm/main/__init__.py, aixterm/mcp_client.py
+- Function 'start' appears in: aixterm/service/service.py, aixterm/service/server.py, aixterm/mcp_client.py, aixterm/plugins/devteam/workflow.py
+- Function 'stop' appears in: aixterm/service/service.py, aixterm/service/server.py, aixterm/mcp_client.py
+- Function 'get_uptime' appears in: aixterm/service/service.py, aixterm/mcp_client.py
+- Function 'cleanup_now' appears in: aixterm/main/__init__.py, aixterm/main/status_manager.py
 
 ## Test Coverage Surface Mapping
 
-### Test Files (31)
+### Test Files (32)
 - aixterm/plugins/devteam/agents/qa_tester.py
 - pytest.ini
 - tests/__init__.py
@@ -499,7 +499,7 @@ No large commented-out code blocks detected.
 - Large file: tests/test_mcp_progress_notifications.py (29244 bytes)
 - Large file: ARCHITECTURE.md (28247 bytes)
 - Large file: aixterm/mcp_client.py (26963 bytes)
-- Large file: docs/audit/audit.md (24688 bytes)
+- Large file: docs/audit/audit.md (24873 bytes)
 - Large file: aixterm/config.py (24431 bytes)
 - Large file: tests/test_task_manager_characterization.py (23810 bytes)
 - High annotation count: aixterm/plugins/devteam/modules/task_manager.py (15 TODOs/FIXMEs)
@@ -521,8 +521,8 @@ No large commented-out code blocks detected.
 
 | ID | Category | Evidence | Impact | Effort | Recommended Action |
 |----|----------|----------|--------|--------|-----------------|
-| F001 | Inconsistency | 37 NOTE annotations across codebase | Med | M | Review and address NOTE annotations systematically |
-| F002 | Legacy/Dead | 25 LEGACY annotations across codebase | Med | M | Review and address LEGACY annotations systematically |
+| F001 | Inconsistency | 39 NOTE annotations across codebase | Med | M | Review and address NOTE annotations systematically |
+| F002 | Legacy/Dead | 26 LEGACY annotations across codebase | Med | M | Review and address LEGACY annotations systematically |
 | F003 | Inconsistency | 7 TODO annotations across codebase | Med | M | Review and address TODO annotations systematically |
 | F004 | Duplication | 20 potentially duplicated function names | Med | L | Review and consolidate duplicate functions |
 
