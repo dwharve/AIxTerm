@@ -9,9 +9,7 @@ from unittest.mock import Mock, patch
 class TestCleanupManager:
     """Test cases for CleanupManager class."""
 
-    # NOTE: Ensure no fixture-dependent code at class scope; all log_dir usages belong inside tests.
-
-    # (Verified: no log_dir declarations at class scope. Previous stray lines removed.)
+    # All fixture-dependent code belongs inside test methods, not at class scope
 
     def test_should_run_cleanup_disabled(self, cleanup_manager):
         """Test cleanup check when cleanup is disabled."""

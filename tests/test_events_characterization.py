@@ -124,7 +124,7 @@ class TestEvent:
 
         assert event.event_type == EventType.TASK_CREATED
         assert event.data == {}
-        # NOTE: The Event constructor auto-generates an ID if None is provided
+        # Event constructor auto-generates an ID if None is provided
         assert event.event_id is not None
         assert isinstance(event.event_id, str)
 
@@ -347,8 +347,7 @@ class TestEventBus:
     @pytest.mark.asyncio
     async def test_unsubscribe_async_handler(self):
         """Test unsubscribing async handlers."""
-        # NOTE: This test is skipped because the current EventBus implementation
-        # does not provide async unsubscribe methods. This represents a gap in the API.
+        # Test currently demonstrates API gap: EventBus lacks async unsubscribe methods
         bus = EventBus()
         handler_called = False
 
