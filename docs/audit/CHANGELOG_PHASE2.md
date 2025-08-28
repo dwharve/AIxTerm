@@ -187,3 +187,73 @@ Eliminate all backwards-compatibility and legacy code remnants to align with the
 ## Legacy Annotations Removed: 26+
 ## No-op Methods Removed: 1 (`_install_integration_code`)
 - **Audit Sections**: All placeholder sections now populated with real data
+
+---
+
+# Phase 2 Batch 5 Logging Standardization & Wrapper De-duplication
+
+*Completed: 2025-01-29*
+
+## Objective
+
+Eliminate duplicated logging wrapper methods (debug/info/warning/error and similar pass-through helpers) across integrations, installers, and services; enforce a single consistent logger acquisition pattern; reduce duplicate function name counts reported by audit while preserving behavior and public API surface.
+
+## Implementation Summary
+
+### Baseline Assessment
+
+**Identified Duplicates**: Found 8 trivial logging wrapper methods across 2 files:
+- `aixterm/integration/base.py`: _NullLogger class with 4 stub methods (debug, info, warning, error)
+- `tests/test_shell_integration.py`: Matching 4 stub methods in test mocks
+
+**Existing Infrastructure**: Confirmed centralized logger utility `get_logger()` already exists in `aixterm.utils`.
+
+### Root Cause Analysis
+
+**Problem**: `BaseIntegration` class used custom `_NullLogger` class with trivial pass-through methods when no logger was provided to constructor.
+
+**Solution**: Replace `_NullLogger` with proper `Logger` instance using existing centralized `get_logger()` utility.
+
+### Changes Made
+
+#### Production Code (`aixterm/integration/base.py`)
+- **Added import**: `from ..utils import get_logger`
+- **Removed**: 16 lines containing `_NullLogger` class definition with 4 wrapper methods
+- **Replaced with**: Single line `self.logger = get_logger(__name__)` 
+- **Result**: -15 lines of code, eliminated 4 duplicate wrapper methods
+
+#### Test Code (`tests/test_shell_integration.py`)
+- **Removed**: 11 lines containing `NullLogger` class with 4 wrapper methods  
+- **Replaced with**: Simple call to `super().__init__()` using default logger behavior
+- **Result**: -10 lines of code, eliminated 4 duplicate wrapper methods
+
+### Metrics Summary
+
+| Metric | Before | After | Delta |
+|--------|--------|-------|-------|
+| debug wrappers | 2 | 0 | -2 (-100%) |
+| info wrappers | 2 | 0 | -2 (-100%) |
+| warning wrappers | 2 | 0 | -2 (-100%) |
+| error wrappers | 2 | 0 | -2 (-100%) |
+| **Total wrapper methods** | **8** | **0** | **-8 (-100%)** |
+| Lines of code (affected files) | ~570 | ~545 | -25 |
+
+### Validation
+
+- **Tests**: All 30 shell integration tests pass
+- **Functionality**: Integration classes properly initialize with `Logger` instances
+- **Behavior**: Enhanced from silent stubs to actual logging output when configured  
+- **Code Quality**: Clean linting and formatting
+- **API Compatibility**: No breaking changes to public interfaces
+
+### Impact
+
+- **Duplication Elimination**: 100% removal of targeted logging wrapper methods
+- **Code Maintainability**: Simplified by removing custom logger classes
+- **Logging Functionality**: Improved from no-op stubs to proper debug/info/warning/error logging
+- **Consistency**: Aligned with project-wide logger acquisition pattern using `get_logger()`
+
+## Files Modified: 2
+## Lines Removed: 25
+## Logging Wrapper Methods Eliminated: 8 (100%)
+## Test Validation: 30/30 shell integration tests pass

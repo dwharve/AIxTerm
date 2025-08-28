@@ -100,20 +100,8 @@ class TestBaseIntegration:
 
         class TestIntegration(BaseIntegration):
             def __init__(self):
-                class NullLogger:
-                    def debug(self, msg):
-                        pass
-
-                    def info(self, msg):
-                        pass
-
-                    def warning(self, msg):
-                        pass
-
-                    def error(self, msg):
-                        pass
-
-                super().__init__(NullLogger())
+                # Use default logger behavior (None) which now uses get_logger
+                super().__init__()
 
             @property
             def shell_name(self):
@@ -315,9 +303,7 @@ class TestShellIntegrationInstallation:
             home_patch = patch("pathlib.Path.home", return_value=Path(temp_dir))
 
             with home_patch:
-                with patch.object(
-                    integration, "find_config_file", return_value=config_file
-                ):
+                with patch.object(integration, "find_config_file", return_value=config_file):
                     with patch.object(integration, "is_available", return_value=True):
                         with patch.object(
                             integration,
@@ -346,13 +332,11 @@ class TestShellIntegrationInstallation:
             rc_dir.mkdir(parents=True, exist_ok=True)
             (rc_dir / "bash.rc").write_text("# bash rc content")
             config_file.write_text(
-                "# Existing content\n# AIxTerm Shell Integration\nif [ -f \"$HOME/.aixterm/bash.rc\" ]; then\n    . \"$HOME/.aixterm/bash.rc\"\nfi\n# More content\n"
+                '# Existing content\n# AIxTerm Shell Integration\nif [ -f "$HOME/.aixterm/bash.rc" ]; then\n    . "$HOME/.aixterm/bash.rc"\nfi\n# More content\n'
             )
 
             with patch("pathlib.Path.home", return_value=Path(temp_dir)):
-                with patch.object(
-                    integration, "find_config_file", return_value=config_file
-                ):
+                with patch.object(integration, "find_config_file", return_value=config_file):
                     result = integration.uninstall()
 
                     assert result is True
@@ -371,9 +355,7 @@ class TestShellIntegrationInstallation:
             config_file = Path(temp_dir) / ".bashrc"
             home_patch = patch("pathlib.Path.home", return_value=Path(temp_dir))
             with home_patch:
-                with patch.object(
-                    integration, "find_config_file", return_value=config_file
-                ):
+                with patch.object(integration, "find_config_file", return_value=config_file):
                     with patch.object(integration, "is_available", return_value=True):
                         with patch.object(
                             integration,
@@ -410,9 +392,7 @@ class TestTTYLogging:
         integrations = [Bash(), Zsh(), Fish()]
 
         for integration in integrations:
-            marker = (
-                integration.integration_marker
-            )  # This is an attribute, not a method
+            marker = integration.integration_marker  # This is an attribute, not a method
             assert "AIxTerm Shell Integration" in marker
 
             script = integration.generate_integration_code()
@@ -437,9 +417,7 @@ class TestIntegrationErrorHandling:
         integration = Bash()
 
         with patch.object(integration, "is_available", return_value=True):
-            with patch.object(
-                integration, "validate_integration_environment", return_value=False
-            ):
+            with patch.object(integration, "validate_integration_environment", return_value=False):
                 with patch("builtins.print"):
                     result = integration.install(interactive=False)
                     assert result is False
@@ -454,9 +432,7 @@ class TestIntegrationErrorHandling:
             config_file.chmod(0o000)  # No permissions
 
             try:
-                with patch.object(
-                    integration, "find_config_file", return_value=config_file
-                ):
+                with patch.object(integration, "find_config_file", return_value=config_file):
                     with patch.object(integration, "is_available", return_value=True):
                         with patch.object(
                             integration,
