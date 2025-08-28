@@ -1,7 +1,6 @@
 """Configuration management for AIxTerm.
 
-Unified Unix domain socket architecture only; legacy HTTP code paths have
-been removed per project rules forbidding retention of dead code.
+Unified Unix domain socket architecture only.
 """
 
 import json
@@ -498,8 +497,6 @@ class AIxTermConfig:
             "reserve_tokens_for_tools", 2000
         )
         return reserve_tokens
-
-    # Legacy network accessor methods removed.
 
     def create_default_config(self, overwrite: bool = False) -> bool:
         """Create a default configuration file.

@@ -47,7 +47,7 @@ class TestEventTypes:
         assert EventType.WORKFLOW_STEP_STARTED.value == "workflow_step_started"
         assert EventType.WORKFLOW_STEP_COMPLETED.value == "workflow_step_completed"
 
-        # Agent events (legacy and new)
+        # Agent events (old and new)
         assert EventType.AGENT_ASSIGNED.value == "agent_assigned"
         assert EventType.AGENT_STARTED_WORK.value == "agent_started_work"
         assert EventType.AGENT_COMPLETED_WORK.value == "agent_completed_work"

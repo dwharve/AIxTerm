@@ -1,7 +1,6 @@
 """Log processor for terminal context extraction using dedicated TTY logs.
 
 Logs are written to `~/.aixterm/tty/{tty}.log` (or `default.log` when no TTY).
-Legacy `.aixterm_log.*` patterns are fully removed per project rules.
 """
 
 import os

@@ -222,7 +222,7 @@ function aixterm_toggle_minimal_logging
     end
 end
 
-# Function to enable legacy minimal logging mode
+# Function to enable minimal logging mode
 function aixterm_minimal_logging
     set -g _AIXTERM_MINIMAL_MODE 1
     echo "AIxTerm: Switched to minimal logging mode (commands only)"

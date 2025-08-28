@@ -8,8 +8,7 @@ over a Unix domain socket located in the user's home runtime directory:
 ~/.aixterm/server.sock
 ```
 
-Legacy HTTP transport support has been removed – the application now auto-starts
-a single local socket service on demand.
+The application now auto-starts a single local socket service on demand.
 
 ## Key Components
 

@@ -12,7 +12,7 @@ The plugin has been modularized to improve maintainability and testability. The 
 
 ```
 devteam/
-├── plugin.py - Original monolithic plugin (legacy)
+├── plugin.py - Original monolithic plugin (archived)
 ├── plugin_v2.py - New modular plugin integration
 ├── IMPLEMENTATION_PLAN.md - Implementation details and roadmap
 └── modules/ - Modular components

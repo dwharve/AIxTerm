@@ -38,18 +38,18 @@ class EventType(Enum):
     WORKFLOW_STEP_COMPLETED = "workflow_step_completed"
 
     # Agent events (both old and new naming for compatibility)
-    AGENT_ASSIGNED = "agent_assigned"  # Legacy
-    AGENT_STARTED_WORK = "agent_started_work"  # Legacy
-    AGENT_COMPLETED_WORK = "agent_completed_work"  # Legacy
-    AGENT_FAILED = "agent_failed"  # Legacy
+    AGENT_ASSIGNED = "agent_assigned"
+    AGENT_STARTED_WORK = "agent_started_work"
+    AGENT_COMPLETED_WORK = "agent_completed_work"
+    AGENT_FAILED = "agent_failed"
     AGENT_TASK_ASSIGNED = "agent_task_assigned"
     AGENT_TASK_STARTED = "agent_task_started"
     AGENT_TASK_COMPLETED = "agent_task_completed"
     AGENT_TASK_FAILED = "agent_task_failed"
 
     # System events
-    SYSTEM_ERROR = "system_error"  # Legacy
-    SYSTEM_INFO = "system_info"  # Legacy
+    SYSTEM_ERROR = "system_error"
+    SYSTEM_INFO = "system_info"
     PLUGIN_INITIALIZED = "plugin_initialized"
     PLUGIN_SHUTDOWN = "plugin_shutdown"
     CONFIG_UPDATED = "config_updated"

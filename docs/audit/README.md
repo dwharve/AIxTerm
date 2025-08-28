@@ -55,7 +55,6 @@ The audit report (`audit.md`) contains:
 ### Additional Documentation
 
 - `CHANGELOG_PHASE2.md`: Detailed changes log for Phase 2 enhancements
-- `LEGACY_FINDINGS_INDEX.md`: Index of superseded findings and current status
 
 ## Interpreting Results
 
@@ -63,7 +62,7 @@ The audit report (`audit.md`) contains:
 
 - **Inconsistency**: Code patterns that vary across the codebase
 - **Duplication**: Similar code that could be consolidated
-- **Legacy/Dead**: Code that may be outdated or unused
+- **Dead Code**: Code that may be outdated or unused
 - **Risky Pattern**: Code that could lead to bugs or maintenance issues
 - **Compat Layer**: Backward compatibility code that could be simplified
 

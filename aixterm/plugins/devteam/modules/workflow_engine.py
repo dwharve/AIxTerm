@@ -1,5 +1,5 @@
 """
-Workflow engine for the DevTeam plugin - Facade for backward compatibility.
+Workflow engine for the DevTeam plugin - Modular architecture facade.
 
 This module has been modularized for better maintainability.
 The implementation is now split into cohesive modules under the workflow_engine/ package.
@@ -18,7 +18,7 @@ from .workflow_engine_modules import (
 # Also re-export the enums from types that tests expect
 from .types import WorkflowStatus, WorkflowStepStatus
 
-# For absolute backward compatibility, expose all the classes at the module level
+# For backward compatibility, expose all the classes at the module level
 __all__ = [
     "Workflow",
     "WorkflowEngine", 
