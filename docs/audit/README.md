@@ -30,10 +30,32 @@ The audit report (`audit.md`) contains:
 - **Language & File Metrics**: Code statistics and largest files
 - **Dependency Inventory**: External dependencies and configuration
 - **Tooling & Automation**: CI/CD, linting, formatting, and build tools
-- **Code Patterns**: Logging, error handling, async/concurrency patterns
+- **Configuration Discovery**: Environment variables with comprehensive pattern detection
+- **Logging Patterns**: Granular logging usage analysis with per-file counts
+- **Error Handling Patterns**: Exception handling and error management patterns
+- **Async/Concurrency Patterns**: Async and threading usage analysis
 - **Code Annotations**: TODO/FIXME/HACK/DEPRECATED comments
-- **Maintenance Hotspots**: Large files, potential duplications, and risk areas
-- **Findings Classification**: Initial categorization of potential improvements
+- **Potential Duplication Candidates**: Function duplications with detailed metrics
+  - Function Duplication Table with file counts and paths
+  - Dunder Methods Summary (separated from main risk set)
+  - Total distinct candidate counts and truncation logic
+- **Test Coverage Surface Mapping**: Static test-to-source mapping
+- **Risk & Maintenance Hotspots**: Complex modules and high-annotation areas
+- **Phase 1 Findings**: Categorized improvement opportunities
+
+## Phase 2 Enhancements
+
+### Enhanced Pattern Detection (Phase 2 Batch 1)
+
+- **Environment Variables**: Detects all access patterns including assignments
+- **Function Duplications**: 126+ distinct candidates with smart truncation
+- **Logging Analysis**: Granular per-file metrics for all logging approaches
+- **Dunder Method Separation**: Ubiquitous patterns separated from actionable duplicates
+
+### Additional Documentation
+
+- `CHANGELOG_PHASE2.md`: Detailed changes log for Phase 2 enhancements
+- `LEGACY_FINDINGS_INDEX.md`: Index of superseded findings and current status
 
 ## Interpreting Results
 
