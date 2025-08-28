@@ -49,12 +49,12 @@ cloc not available - install with: apt-get install cloc
 
 ### File Distribution
 
-- **Total Files:** 168
+- **Total Files:** 169
 - **Total Size:** 1.3 MB
 
 #### By File Type
 - .py: 117 files
-- .md: 36 files
+- .md: 37 files
 - no_extension: 6 files
 - .txt: 2 files
 - .json: 2 files
@@ -74,7 +74,7 @@ cloc not available - install with: apt-get install cloc
 - aixterm/mcp_client.py: 26.3 KB
 - aixterm/config.py: 23.9 KB
 - aixterm/integration/README.md: 22.5 KB
-- tests/test_context.py: 21.5 KB
+- docs/audit/audit.md: 22.1 KB
 
 ## Dependency Inventory
 
@@ -132,6 +132,7 @@ cloc not available - install with: apt-get install cloc
 
 ### Makefile Targets
 - all
+- audit-baseline
 - build
 - build-sdist
 - build-wheel
@@ -150,7 +151,6 @@ cloc not available - install with: apt-get install cloc
 - import-sort
 - info
 - install
-- install-build-tools
 
 ### CI/CD Workflows
 No GitHub workflows found.
@@ -446,7 +446,7 @@ No large commented-out code blocks detected.
 - Large file: aixterm/mcp_client.py (26963 bytes)
 - Large file: aixterm/config.py (24431 bytes)
 - Large file: aixterm/integration/README.md (23064 bytes)
-- Large file: tests/test_context.py (22021 bytes)
+- Large file: docs/audit/audit.md (22646 bytes)
 - High annotation count: aixterm/plugins/devteam/modules/task_manager.py (15 TODOs/FIXMEs)
 - High annotation count: aixterm/plugins/devteam/modules/events.py (6 TODOs/FIXMEs)
 - High annotation count: scripts/generate_audit.py (5 TODOs/FIXMEs)
