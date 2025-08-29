@@ -146,10 +146,7 @@ class WorkflowEngine:
         """
         try:
             # Get the start step
-            if (
-                not workflow.start_step_id
-                or workflow.start_step_id not in workflow.steps
-            ):
+            if not workflow.start_step_id or workflow.start_step_id not in workflow.steps:
                 workflow.status = WorkflowStatus.FAILED
                 logger.error(
                     f"Workflow {workflow.workflow_id} has no valid start step: "
@@ -169,9 +166,7 @@ class WorkflowEngine:
                 for step_id in current_steps:
                     step = workflow.steps.get(step_id)
                     if not step:
-                        logger.error(
-                            f"Step {step_id} not found in workflow {workflow.workflow_id}"
-                        )
+                        logger.error(f"Step {step_id} not found in workflow {workflow.workflow_id}")
                         continue
 
                     # Publish step started event
@@ -219,9 +214,7 @@ class WorkflowEngine:
 
                 # Update current steps
                 current_steps = [
-                    step_id
-                    for step_id in next_steps
-                    if step_id not in workflow.completed_steps
+                    step_id for step_id in next_steps if step_id not in workflow.completed_steps
                 ]
                 workflow.current_steps = set(current_steps)
 
@@ -303,7 +296,7 @@ class WorkflowEngine:
         if workflow_id in self._workflow_tasks:
             self._workflow_tasks[workflow_id].cancel()
             del self._workflow_tasks[workflow_id]
-        
+
         self.running_workflows.discard(workflow_id)
 
         # Update workflow status

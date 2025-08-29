@@ -33,17 +33,17 @@ class TestWorkflowEngineCharacterization:
         mock_config_manager = Mock()
         mock_event_bus = Mock()
         mock_task_manager = Mock()
-        
+
         mock_config_manager.get_config.return_value = {
             "max_concurrent_workflows": 5,
             "step_timeout": 300,
-            "retry_attempts": 3
+            "retry_attempts": 3,
         }
-        
+
         return {
             "config_manager": mock_config_manager,
             "event_bus": mock_event_bus,
-            "task_manager": mock_task_manager
+            "task_manager": mock_task_manager,
         }
 
     @pytest.fixture
@@ -52,7 +52,7 @@ class TestWorkflowEngineCharacterization:
         return WorkflowEngine(
             config_manager=mock_dependencies["config_manager"],
             event_bus=mock_dependencies["event_bus"],
-            task_manager=mock_dependencies["task_manager"]
+            task_manager=mock_dependencies["task_manager"],
         )
 
     def test_workflow_step_initialization(self):
@@ -72,7 +72,7 @@ class TestWorkflowEngineCharacterization:
             name=name,
             description=description,
             next_steps=next_steps,
-            metadata=metadata
+            metadata=metadata,
         )
 
         # Then: step should have expected attributes
@@ -102,7 +102,7 @@ class TestWorkflowEngineCharacterization:
             "started_at": "2024-01-01T00:00:00",
             "completed_at": "2024-01-01T01:00:00",
             "result": {"output": "success"},
-            "error": None
+            "error": None,
         }
 
         # When: creating step from dictionary
@@ -130,7 +130,7 @@ class TestWorkflowEngineCharacterization:
             name="Test Condition",
             description="A condition step",
             next_steps=["branch_a", "branch_b"],
-            metadata={"condition_type": "boolean"}
+            metadata={"condition_type": "boolean"},
         )
         step.status = WorkflowStepStatus.IN_PROGRESS
         step.started_at = "2024-01-01T00:00:00"
@@ -141,8 +141,17 @@ class TestWorkflowEngineCharacterization:
 
         # Then: dictionary should contain all expected keys and values
         expected_keys = [
-            "step_id", "step_type", "name", "description", "next_steps",
-            "metadata", "status", "started_at", "completed_at", "result", "error"
+            "step_id",
+            "step_type",
+            "name",
+            "description",
+            "next_steps",
+            "metadata",
+            "status",
+            "started_at",
+            "completed_at",
+            "result",
+            "error",
         ]
         assert set(step_dict.keys()) == set(expected_keys)
         assert step_dict["step_id"] == "test_step"
@@ -155,50 +164,49 @@ class TestWorkflowEngineCharacterization:
     def test_task_step_initialization(self):
         """Test TaskStep initialization with specific task parameters."""
         # Given: task step parameters
-        task_params = {
-            "task_title": "Implement feature",
-            "task_description": "Add new functionality",
-            "task_type": "feature",
-            "assignee": "developer_1"
-        }
-
         # When: creating task step
         step = TaskStep(
             step_id="task_1",
-            step_type=WorkflowStepType.TASK,
             name="Feature Task",
             description="Task step for feature",
-            metadata=task_params
+            task_title="Implement feature",
+            task_description="Add new functionality",
+            task_type="feature",
+            task_priority=2,  # MEDIUM priority
+            assignee="developer_1",
+            metadata={"extra": "data"},
         )
 
         # Then: task step should have correct initialization
         assert isinstance(step, WorkflowStep)
         assert step.step_type == WorkflowStepType.TASK
-        assert step.metadata == task_params
-        assert hasattr(step, '_execute')  # Should have _execute method for async execution
+        assert step.task_title == "Implement feature"
+        assert step.task_description == "Add new functionality"
+        assert step.task_type == "feature"
+        assert step.task_priority == 2
+        assert step.assignee == "developer_1"
+        assert hasattr(step, "_execute")  # Should have _execute method for async execution
 
     def test_condition_step_initialization(self):
         """Test ConditionStep initialization with condition parameters."""
-        # Given: condition step parameters  
-        condition_params = {
-            "condition_type": "approval_required",
-            "condition_value": True,
-            "evaluation_criteria": "code_review_passed"
-        }
-
         # When: creating condition step
         step = ConditionStep(
-            step_id="condition_1", 
-            step_type=WorkflowStepType.CONDITION,
+            step_id="condition_1",
             name="Review Condition",
             description="Check if code review passed",
-            metadata=condition_params
+            condition="code_review_passed == True",
+            true_step="approval_step",
+            false_step="rejection_step",
+            metadata={"condition_type": "approval_required"},
         )
 
         # Then: condition step should have correct initialization
         assert isinstance(step, WorkflowStep)
         assert step.step_type == WorkflowStepType.CONDITION
-        assert step.metadata == condition_params
+        assert step.condition == "code_review_passed == True"
+        assert step.true_step == "approval_step"
+        assert step.false_step == "rejection_step"
+        assert step.metadata == {"condition_type": "approval_required"}
 
     def test_workflow_initialization(self):
         """Test Workflow initialization preserves current behavior."""
@@ -206,21 +214,17 @@ class TestWorkflowEngineCharacterization:
         workflow_id = "workflow_123"
         name = "Feature Development"
         description = "Complete feature development workflow"
-        steps = [
-            WorkflowStep(
-                step_id="step_1",
-                step_type=WorkflowStepType.TASK,
-                name="Analysis",
-                description="Analyze requirements"
-            )
-        ]
+        step = WorkflowStep(
+            step_id="step_1",
+            step_type=WorkflowStepType.TASK,
+            name="Analysis",
+            description="Analyze requirements",
+        )
+        steps = {"step_1": step}
 
         # When: creating workflow
         workflow = Workflow(
-            workflow_id=workflow_id,
-            name=name,
-            description=description,
-            steps=steps
+            workflow_id=workflow_id, name=name, description=description, steps=steps
         )
 
         # Then: workflow should have expected attributes
@@ -229,7 +233,7 @@ class TestWorkflowEngineCharacterization:
         assert workflow.description == description
         assert workflow.steps == steps
         assert workflow.status == WorkflowStatus.PENDING
-        assert workflow.current_step is None
+        assert workflow.current_steps == set()  # Changed from current_step to current_steps
         assert workflow.context == {}
         assert workflow.created_at is not None
         assert workflow.started_at is None
@@ -242,8 +246,8 @@ class TestWorkflowEngineCharacterization:
         # When: creating workflow engine
         engine = WorkflowEngine(
             config_manager=mock_dependencies["config_manager"],
-            event_bus=mock_dependencies["event_bus"], 
-            task_manager=mock_dependencies["task_manager"]
+            event_bus=mock_dependencies["event_bus"],
+            task_manager=mock_dependencies["task_manager"],
         )
 
         # Then: engine should be properly initialized
@@ -252,59 +256,51 @@ class TestWorkflowEngineCharacterization:
         assert engine.task_manager == mock_dependencies["task_manager"]
         assert engine.workflows == {}
         assert engine.running_workflows == set()
-        assert hasattr(engine, '_shutdown_event')
+        assert hasattr(engine, "_shutdown_event")
 
     def test_workflow_engine_create_workflow(self, workflow_engine):
         """Test workflow creation through engine preserves current behavior."""
-        # Given: workflow template
-        template = {
-            "name": "Test Workflow",
-            "description": "A test workflow",
-            "steps": [
-                {
-                    "step_id": "step_1",
-                    "step_type": "task",
-                    "name": "First Step",
-                    "description": "The first step",
-                    "metadata": {"task_type": "analysis"}
-                }
-            ]
-        }
+        # Given: workflow parameters
+        step = WorkflowStep(
+            step_id="step_1",
+            step_type=WorkflowStepType.TASK,
+            name="First Step",
+            description="The first step",
+            metadata={"task_type": "analysis"},
+        )
+        steps = {"step_1": step}
 
         # When: creating workflow
-        workflow_id = workflow_engine.create_workflow(template)
+        workflow = workflow_engine.create_workflow(
+            name="Test Workflow", description="A test workflow", steps=steps
+        )
 
         # Then: workflow should be created and stored
-        assert isinstance(workflow_id, str)
-        assert workflow_id in workflow_engine.workflows
-        
-        workflow = workflow_engine.workflows[workflow_id]
+        assert isinstance(workflow, Workflow)
+        assert workflow.workflow_id in workflow_engine.workflows
         assert workflow.name == "Test Workflow"
         assert workflow.description == "A test workflow"
         assert len(workflow.steps) == 1
-        assert workflow.steps[0].step_id == "step_1"
+        assert "step_1" in workflow.steps
 
     def test_workflow_step_status_transitions(self):
         """Test that workflow step status follows expected transitions."""
         # Given: a workflow step
         step = WorkflowStep(
-            step_id="test",
-            step_type=WorkflowStepType.TASK,
-            name="Test",
-            description="Test step"
+            step_id="test", step_type=WorkflowStepType.TASK, name="Test", description="Test step"
         )
 
         # When: step transitions through statuses
         initial_status = step.status
-        
+
         # Then: initial status should be PENDING
         assert initial_status == WorkflowStepStatus.PENDING
-        
+
         # And: status can be updated (current behavior)
         step.status = WorkflowStepStatus.IN_PROGRESS
         assert step.status == WorkflowStepStatus.IN_PROGRESS
-        
-        step.status = WorkflowStepStatus.COMPLETED  
+
+        step.status = WorkflowStepStatus.COMPLETED
         assert step.status == WorkflowStepStatus.COMPLETED
 
     def test_workflow_context_handling(self):
@@ -314,7 +310,7 @@ class TestWorkflowEngineCharacterization:
             workflow_id="test_workflow",
             name="Context Test",
             description="Test context handling",
-            steps=[]
+            steps=[],
         )
 
         # When: adding context data
@@ -329,65 +325,68 @@ class TestWorkflowEngineCharacterization:
     @pytest.mark.asyncio
     async def test_workflow_step_execute_pattern(self, mock_dependencies):
         """Test that workflow step execute method follows expected pattern.
-        
-        This test characterizes how the base execute() method handles 
+
+        This test characterizes how the base execute() method handles
         NotImplementedError from _execute() implementations and manages
         status transitions and error handling.
         """
         # Given: a task step with mocked dependencies
         step = TaskStep(
             step_id="task_step",
-            step_type=WorkflowStepType.TASK, 
             name="Test Task",
             description="A test task step",
-            metadata={"task_type": "test"}
+            task_title="Test Task Title",
+            task_description="Test task description",
+            task_type="feature",  # Use valid TaskType value
+            task_priority=2,  # MEDIUM priority
+            metadata={"task_type": "test"},
         )
-        
+
         workflow_engine = Mock()
-        context = {"input_data": "test"}
+        # Mock the task_manager to return a mock task
+        mock_task = Mock()
+        mock_task.task_id = "test_task_id"
+        mock_task.status.value = "pending"
+        workflow_engine.task_manager.create_task.return_value = mock_task
 
-        # When: executing step (this will test the base execute pattern)
-        # We expect this to fail in characterization since _execute is not implemented
-        # but we're testing the pattern and state transitions
-        with pytest.raises(NotImplementedError):
-            await step.execute(context, workflow_engine)
+        # Create a mock workflow
+        workflow = Mock()
+        workflow.workflow_id = "test_workflow"
 
-        # Then: step status should have transitioned to IN_PROGRESS and then back
-        # In actual implementation, the status transitions happen in base execute()
-        # This characterizes the current error handling behavior
-        assert step.status == WorkflowStepStatus.FAILED
-        assert step.started_at is not None
-        assert step.completed_at is not None
-        assert step.error is not None
+        # Context needs workflow engine
+        context = {"input_data": "test", "_workflow_engine": workflow_engine}
+
+        # When: executing step
+        result_context = await step.execute(context, workflow)
+
+        # Then: step should have executed successfully
+        assert result_context is not None
+        assert result_context.get("task_id") == "test_task_id"
 
     def test_workflow_engine_workflow_storage(self, workflow_engine):
         """Test that workflow engine stores workflows correctly."""
-        # Given: multiple workflow templates
-        template1 = {
-            "name": "Workflow 1",
-            "description": "First workflow", 
-            "steps": []
-        }
-        template2 = {
-            "name": "Workflow 2",
-            "description": "Second workflow",
-            "steps": []
-        }
+        # Given: multiple workflow parameters
+        steps1 = {}  # Empty steps dict
+        steps2 = {}  # Empty steps dict
 
         # When: creating multiple workflows
-        id1 = workflow_engine.create_workflow(template1)
-        id2 = workflow_engine.create_workflow(template2)
+        workflow1 = workflow_engine.create_workflow(
+            name="Workflow 1", description="First workflow", steps=steps1
+        )
+        workflow2 = workflow_engine.create_workflow(
+            name="Workflow 2", description="Second workflow", steps=steps2
+        )
 
         # Then: both workflows should be stored with unique IDs
-        assert id1 != id2
-        assert id1 in workflow_engine.workflows
-        assert id2 in workflow_engine.workflows
+        assert workflow1.workflow_id != workflow2.workflow_id
+        assert workflow1.workflow_id in workflow_engine.workflows
+        assert workflow2.workflow_id in workflow_engine.workflows
         assert len(workflow_engine.workflows) == 2
 
     def test_workflow_step_enum_values(self):
         """Test that workflow step enums maintain expected values."""
         # This characterizes the current enum values to prevent accidental changes
-        
+
         # WorkflowStepType values
         assert WorkflowStepType.TASK.value == "task"
         assert WorkflowStepType.CONDITION.value == "condition"
@@ -398,7 +397,7 @@ class TestWorkflowEngineCharacterization:
         assert WorkflowStepType.WAIT.value == "wait"
         assert WorkflowStepType.SCRIPT.value == "script"
 
-        # WorkflowStepStatus values  
+        # WorkflowStepStatus values
         assert WorkflowStepStatus.PENDING.value == "pending"
         assert WorkflowStepStatus.IN_PROGRESS.value == "in_progress"
         assert WorkflowStepStatus.COMPLETED.value == "completed"
@@ -417,23 +416,27 @@ class TestWorkflowEngineCharacterization:
         # Given: workflow dictionary representation
         workflow_dict = {
             "workflow_id": "wf_123",
-            "name": "Test Workflow", 
+            "name": "Test Workflow",
             "description": "A test workflow",
             "status": "running",
             "context": {"var1": "value1"},
             "created_at": "2024-01-01T00:00:00",
             "started_at": "2024-01-01T00:05:00",
-            "current_step": "step_1",
-            "steps": [
-                {
+            "current_steps": ["step_1"],  # Changed to match API
+            "steps": {  # Changed to dict format
+                "step_1": {
                     "step_id": "step_1",
                     "step_type": "task",
                     "name": "First Step",
                     "description": "First step",
                     "status": "in_progress",
-                    "metadata": {}
+                    "task_title": "Test Task",
+                    "task_description": "Test task description",
+                    "task_type": "feature",  # Use valid TaskType value
+                    "task_priority": 2,  # MEDIUM priority
+                    "metadata": {},
                 }
-            ]
+            },
         }
 
         # When: creating workflow from dictionary
@@ -447,7 +450,8 @@ class TestWorkflowEngineCharacterization:
         assert workflow.context == {"var1": "value1"}
         assert workflow.created_at == "2024-01-01T00:00:00"
         assert workflow.started_at == "2024-01-01T00:05:00"
-        assert workflow.current_step == "step_1"
+        assert "step_1" in workflow.current_steps
         assert len(workflow.steps) == 1
-        assert workflow.steps[0].step_id == "step_1"
-        assert workflow.steps[0].status == WorkflowStepStatus.IN_PROGRESS
+        assert "step_1" in workflow.steps
+        assert workflow.steps["step_1"].step_id == "step_1"
+        assert workflow.steps["step_1"].status == WorkflowStepStatus.IN_PROGRESS

@@ -12,7 +12,7 @@ from .step_types import TaskStep, ConditionStep
 
 __all__ = [
     "Workflow",
-    "WorkflowStep", 
+    "WorkflowStep",
     "WorkflowStepType",
     "WorkflowEngine",
     "TaskStep",

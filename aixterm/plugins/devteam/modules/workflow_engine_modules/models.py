@@ -107,9 +107,7 @@ class WorkflowStep:
 
         return step
 
-    async def execute(
-        self, context: Dict[str, Any], workflow: "Workflow"
-    ) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any], workflow: "Workflow") -> Dict[str, Any]:
         """
         Execute the workflow step.
 
@@ -135,9 +133,7 @@ class WorkflowStep:
 
         return context
 
-    async def _execute(
-        self, context: Dict[str, Any], workflow: "Workflow"
-    ) -> Dict[str, Any]:
+    async def _execute(self, context: Dict[str, Any], workflow: "Workflow") -> Dict[str, Any]:
         """
         Internal execution method to be overridden by subclasses.
 
@@ -242,10 +238,12 @@ class Workflow:
             if step_type == WorkflowStepType.TASK:
                 # Import here to avoid circular imports
                 from .step_types import TaskStep
+
                 steps[step_id] = TaskStep.from_dict(step_data)
             elif step_type == WorkflowStepType.CONDITION:
                 # Import here to avoid circular imports
                 from .step_types import ConditionStep
+
                 steps[step_id] = ConditionStep.from_dict(step_data)
             else:
                 # Generic workflow step
@@ -267,5 +265,6 @@ class Workflow:
         workflow.completed_at = workflow_dict.get("completed_at")
         workflow.current_steps = set(workflow_dict.get("current_steps", []))
         workflow.completed_steps = set(workflow_dict.get("completed_steps", []))
+        workflow.context = workflow_dict.get("context", {})  # Set context from dict
 
         return workflow
