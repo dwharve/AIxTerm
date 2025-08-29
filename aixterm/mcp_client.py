@@ -260,7 +260,7 @@ class MCPClient:
             return server.call_tool(tool_name, arguments)
         except Exception as e:
             self.logger.error(f"Error calling tool {tool_name} on {server_name}: {e}")
-            raise MCPError(f"Tool call failed: {e}")
+            self._raise_tool_call_error(e)
 
     def call_tool_with_progress(
         self,
@@ -333,14 +333,14 @@ class MCPClient:
     def shutdown(self) -> None:
         """Shutdown all MCP servers."""
         self.logger.info("Shutting down MCP servers")
-        
+
         # Use lifecycle manager for consistent shutdown handling
         lifecycle_manager = LifecycleManager(self.logger)
         success = lifecycle_manager.shutdown_registry(self.servers, "MCP servers")
-        
+
         # Clear servers registry regardless of success to prevent further use
         self.servers.clear()
-        
+
         if not success:
             self.logger.warning("Some MCP servers may not have shut down cleanly")
         self._initialized = False
@@ -483,7 +483,6 @@ class MCPServer:
             _do_start()
         except Exception as e:
             # Retry once on transient startup errors (e.g., connection closed during init)
-            msg = str(e).lower()
             self.logger.warning(
                 f"MCP server start failed: {e}. Will retry once after short backoff"
             )
@@ -626,7 +625,14 @@ class MCPServer:
         if not self._session:
             raise MCPError("Session not initialized")
 
+    def _ensure_server_running(self) -> None:
+        """Ensure server is running, raise MCPError if not."""
+        if not self.is_running():
+            raise MCPError("Server is not running")
 
+    def _raise_tool_call_error(self, e: Exception) -> None:
+        """Raise standardized tool call error."""
+        raise MCPError(f"Tool call failed: {e}")
 
     def is_running(self) -> bool:
         """Check if server is running."""
@@ -651,8 +657,7 @@ class MCPServer:
         Returns:
             List of tool definitions
         """
-        if not self.is_running():
-            raise MCPError("Server is not running")
+        self._ensure_server_running()
 
         # Check cache
         cache_timeout = 30  # 30 seconds
@@ -707,8 +712,7 @@ class MCPServer:
         Returns:
             Tool result
         """
-        if not self.is_running():
-            raise MCPError("Server is not running")
+        self._ensure_server_running()
 
         try:
             # Call tool via session
@@ -745,7 +749,7 @@ class MCPServer:
 
         except Exception as e:
             self.logger.error(f"Error calling tool {tool_name}: {e}")
-            raise MCPError(f"Tool call failed: {e}")
+            self._raise_tool_call_error(e)
 
     async def _call_tool_async(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """Call tool asynchronously."""

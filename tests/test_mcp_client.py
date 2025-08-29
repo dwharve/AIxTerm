@@ -431,3 +431,45 @@ class TestMCPServer:
 
         with pytest.raises(MCPError, match="Server is not running"):
             server.call_tool("test_tool", {})
+
+
+class TestMCPHelperMethods:
+    """Test helper methods for error construction."""
+
+    @pytest.fixture
+    def mock_server(self):
+        """Create mock server for testing helpers."""
+        config = {"name": "test", "command": ["echo", "test"]}
+        logger = Mock()
+        loop = Mock()
+        return MCPServer(config, logger, loop)
+
+    def test_ensure_session_initialized_with_session(self, mock_server):
+        """Test session validation when session exists."""
+        mock_server._session = Mock()
+        # Should not raise
+        mock_server._ensure_session_initialized()
+
+    def test_ensure_session_initialized_without_session(self, mock_server):
+        """Test session validation when session is None."""
+        mock_server._session = None
+        with pytest.raises(MCPError, match="Session not initialized"):
+            mock_server._ensure_session_initialized()
+
+    def test_ensure_server_running_when_running(self, mock_server):
+        """Test server state validation when running."""
+        mock_server.is_running = Mock(return_value=True)
+        # Should not raise
+        mock_server._ensure_server_running()
+
+    def test_ensure_server_running_when_stopped(self, mock_server):
+        """Test server state validation when stopped."""
+        mock_server.is_running = Mock(return_value=False)
+        with pytest.raises(MCPError, match="Server is not running"):
+            mock_server._ensure_server_running()
+
+    def test_raise_tool_call_error(self, mock_server):
+        """Test standardized tool call error construction."""
+        test_exception = ValueError("Test error message")
+        with pytest.raises(MCPError, match="Tool call failed: Test error message"):
+            mock_server._raise_tool_call_error(test_exception)
