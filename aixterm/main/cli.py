@@ -4,8 +4,8 @@ import argparse
 import sys
 from typing import List, Optional
 
-from aixterm.utils import get_current_shell, get_logger
-from aixterm.config_env.env_vars import set_log_level
+from ..utils import get_current_shell, get_logger
+from ..config_env.env_vars import set_log_level
 from .shell_integration import ShellIntegrationManager
 from .status_manager import StatusManager
 from .tools_manager import ToolsManager

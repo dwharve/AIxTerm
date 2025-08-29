@@ -9,7 +9,7 @@ import logging
 import uuid
 from typing import Any, Dict, List
 
-from aixterm.plugins.base import Plugin
+from ...plugins.base import Plugin
 
 from ..modules.events import EventBus
 from ..modules.task_manager import TaskManager
