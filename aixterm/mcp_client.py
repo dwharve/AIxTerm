@@ -182,6 +182,10 @@ class MCPClient:
                     f"Cleaned up {len(expired_tokens)} expired progress callbacks"
                 )
 
+    def _raise_tool_call_error(self, e: Exception) -> None:
+        """Raise standardized tool call error."""
+        raise MCPError(f"Tool call failed: {e}")
+
     def initialize(self) -> None:
         """Initialize MCP servers."""
         if self._initialized:

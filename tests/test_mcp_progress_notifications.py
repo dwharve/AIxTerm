@@ -368,8 +368,9 @@ class TestMCPClient(unittest.TestCase):
         with self.assertRaises(MCPError):
             self.client.call_tool("test_tool", "test-server", {})
 
-    def test_shutdown_with_server_error(self):
-        """Test shutdown when server stop fails."""
+    @patch("aixterm.mcp_client.LifecycleManager")
+    def test_shutdown_with_server_error(self, mock_lifecycle_manager_class):
+        """Test shutdown when lifecycle manager shutdown fails."""
         # Mock coroutines to avoid warnings
         with (
             patch.object(MCPServer, "_initialize_session", mock_coro()),
@@ -377,16 +378,17 @@ class TestMCPClient(unittest.TestCase):
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
             patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
+            mock_lifecycle_manager = Mock()
+            mock_lifecycle_manager_class.return_value = mock_lifecycle_manager
+            mock_lifecycle_manager.shutdown_registry.return_value = False  # Indicates failure
 
             mock_server = Mock()
-            mock_server.stop.side_effect = Exception("Stop error")
-
             self.client.servers["test-server"] = mock_server
             self.client._initialized = True
 
-            with patch.object(self.client.logger, "error") as mock_error:
+            with patch.object(self.client.logger, "warning") as mock_warning:
                 self.client.shutdown()
-                mock_error.assert_called()
+                mock_warning.assert_called_with("Some MCP servers may not have shut down cleanly")
 
     def test_get_server_status(self):
         """Test getting server status."""
@@ -440,8 +442,13 @@ class TestMCPClient(unittest.TestCase):
 
         self.assertEqual(status, expected)
 
-    def test_shutdown(self):
+    @patch("aixterm.mcp_client.LifecycleManager")
+    def test_shutdown(self, mock_lifecycle_manager_class):
         """Test client shutdown."""
+        mock_lifecycle_manager = Mock()
+        mock_lifecycle_manager_class.return_value = mock_lifecycle_manager
+        mock_lifecycle_manager.shutdown_registry.return_value = True
+        
         # Add a mock server
         mock_server = Mock()
         self.client.servers["test-server"] = mock_server
@@ -451,8 +458,10 @@ class TestMCPClient(unittest.TestCase):
 
         self.client.shutdown()
 
-        # Verify server was stopped
-        mock_server.stop.assert_called_once()
+        # Verify lifecycle manager was used
+        mock_lifecycle_manager.shutdown_registry.assert_called_once_with(
+            self.client.servers, "MCP servers"
+        )
 
         # Verify cleanup
         self.assertEqual(len(self.client.servers), 0)

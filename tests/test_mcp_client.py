@@ -473,3 +473,13 @@ class TestMCPHelperMethods:
         test_exception = ValueError("Test error message")
         with pytest.raises(MCPError, match="Tool call failed: Test error message"):
             mock_server._raise_tool_call_error(test_exception)
+
+    def test_mcp_client_raise_tool_call_error(self):
+        """Test standardized tool call error construction on MCPClient."""
+        config = Mock()
+        config.get_mcp_servers.return_value = []
+        client = MCPClient(config)
+        
+        test_exception = ValueError("Client test error")
+        with pytest.raises(MCPError, match="Tool call failed: Client test error"):
+            client._raise_tool_call_error(test_exception)
