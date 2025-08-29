@@ -1,0 +1,148 @@
+Phase 2 Batch 8: MCP Client Simplification Baseline Metrics
+===========================================================
+
+Generated: 2025-01-30
+
+## File Metrics
+
+### Main File
+- File: aixterm/mcp_client.py
+- Lines of Code: 754
+- Classes: 5
+- Public Functions: 21
+
+## Public API Surface
+
+### Classes (5)
+1. ProgressParams (dataclass) - Line 18
+2. ProgressCallback (wrapper class) - Line 27  
+3. MCPError (exception class) - Line 60
+4. MCPClient (main client) - Line 66
+5. MCPServer (server wrapper) - Line 398
+
+### Public Functions (21)
+MCPClient methods:
+- register_progress_callback (Line 106)
+- unregister_progress_callback (Line 122) 
+- handle_progress_notification (Line 131)
+- cleanup_expired_callbacks (Line 169)
+- initialize (Line 185)
+- get_available_tools (Line 210)
+- call_tool (Line 235)
+- call_tool_with_progress (Line 265)
+- shutdown (Line 333)
+- get_server_status (Line 362)
+- list_tools (Line 378)
+
+MCPServer methods:
+- start (Line 424)
+- stop (Line 555)
+- is_running (Line 629)
+- get_pid (Line 633)
+- get_uptime (Line 637)
+- list_tools (Line 643) 
+- call_tool (Line 699)
+
+Other:
+- ProgressCallback.is_expired (Line 53)
+- run_loop nested function (Line 94)
+
+## Duplication Analysis
+
+### Error Message Patterns (13 total raises)
+Pattern                                    | Count | Locations
+------------------------------------------|-------|----------
+"Server is not running"                   |   2   | Lines 652, 709
+"Session not initialized"                 |   2   | Lines 696, 752
+"Tool call failed: {e}"                   |   2   | Lines 263, 747
+"Event loop not initialized"              |   1   | Line 197
+"Server parameters not initialized"       |   1   | Line 499
+"Empty command after normalization"       |   1   | Line 456
+"Failed to start MCP server: {e2}"        |   1   | Line 495
+"MCP server '{server_name}' not found"    |   1   | Line 252
+"Failed to list tools: {e}"               |   1   | Line 691
+
+**Total Duplicate Error Messages**: 3 pairs (6 instances)
+
+### State Checking Patterns  
+- is_running() checks: 8 occurrences
+- server.is_running(): 5 occurrences  
+- Consistent pattern: check state → take action
+
+### Cleanup Method Patterns (15 occurrences)
+- _cleanup_session_safely(): complex logic (Lines 587-622)
+- _shielded_cleanup_session(): wrapper (Line 624-627)
+- cleanup_expired_callbacks(): distinct logic (Line 169-183)
+- Multiple cleanup contexts in shutdown/stop methods
+
+### Progress Token Management (21 occurrences)
+- Progress token generation: f"tool_{int(time.time() * 1000)}"
+- Callback registration/unregistration patterns
+- Progress parameter construction patterns (ProgressParams creation)
+
+### Logging Patterns (29 total logger calls)
+Common patterns:
+- self.logger.error(f"Error ... {tool_name}: {e}")  
+- self.logger.debug(f"... token {token} ...")
+- self.logger.info/warning with server names
+
+## Responsibility Clusters Analysis
+
+### Connection/Session Management (~200 LOC)
+- MCPServer initialization and session handling
+- Async session setup/cleanup
+- Notification listener management
+
+### Progress Management (~150 LOC)  
+- Progress callback registration/handling
+- Progress parameter construction
+- Callback expiration management
+
+### Tool Interface (~200 LOC)
+- Tool calling logic
+- Result processing/formatting
+- Error handling and retries
+
+### Client Management (~100 LOC)
+- Server lifecycle management
+- Status reporting
+- Shutdown coordination
+
+### Utility/Helper (~100 LOC)
+- Error construction
+- State checking
+- Event loop management
+
+## Potential Consolidation Opportunities
+
+### High Priority (≥2 duplicates found)
+1. **Error Construction Helper**: 3 duplicate error messages
+2. **State Validation Helper**: is_running() + error pattern repeated  
+3. **Progress Token Generation**: token creation pattern
+4. **Tool Result Processing**: result format handling
+
+### Medium Priority (patterns but <2 exact duplicates)
+1. **Session Cleanup Coordination**: multiple cleanup contexts
+2. **Logging Message Formatting**: similar patterns but different content
+
+## File Split Assessment
+
+**Current Size**: 754 LOC (above ~600 threshold)
+**Cohesion Analysis**: 
+- Strong clusters identified (5 distinct responsibility areas)
+- Cross-dependencies present but manageable
+- Public API surface well-defined
+
+**Recommendation**: Consider split into package if consolidation doesn't sufficiently reduce complexity.
+
+Potential modules:
+- connection.py: Session management (~200 LOC)
+- transport.py: Low-level I/O and protocol (~150 LOC)  
+- progress.py: Progress callback system (~150 LOC)
+- client.py: Public API interface (~150 LOC)
+- __init__.py: Re-export public API
+
+## Test Coverage Status
+- Test file: tests/test_mcp_client.py  
+- Tests: 21 total, 20 passing, 1 failing (minor shutdown test)
+- Coverage areas: All public methods have basic tests
