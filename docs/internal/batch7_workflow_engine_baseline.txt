@@ -1,0 +1,70 @@
+# Batch 7: workflow_engine Decomposition Baseline
+Date: 2025-01-16
+Baseline File: aixterm/plugins/devteam/modules/workflow_engine_original.py
+
+## LOC Metrics
+- Total LOC: 942
+- Blank lines and comments included in count
+
+## Symbol Inventory
+### Top-level Classes
+1. WorkflowStepType (Enum) - line 23
+   - 8 enum values (TASK, CONDITION, FORK, JOIN, SUBPROCESS, TRIGGER, WAIT, SCRIPT)
+
+2. WorkflowStep (Base class) - line 36  
+   - Constructor (__init__)
+   - to_dict() method - line 76
+   - from_dict() classmethod - line 96
+   - execute() method - line 136
+
+3. TaskStep (WorkflowStep) - line 169
+   - Inherits from WorkflowStep
+   - Task-specific initialization and execute logic
+   - to_dict() method - line 269 
+   - from_dict() classmethod - line 288
+
+4. ConditionStep (WorkflowStep) - line 371
+   - Inherits from WorkflowStep
+   - Condition evaluation logic
+   - to_dict() method - line 428
+   - from_dict() classmethod - line 448
+
+5. Workflow (Main model) - line 513
+   - Constructor with workflow metadata
+   - to_dict() method - line 563
+   - from_dict() classmethod - line 580
+
+6. WorkflowEngine (Main orchestrator) - line 631
+   - create_workflow() method - line 654
+   - get_workflow() method - line 687
+   - start_workflow() method - line 693
+   - _execute_workflow() async method - line 722
+   - _execute_step() async method - line 798
+   - cancel_workflow() method - line 851
+   - _publish_workflow_event() method - line 861
+
+## Current Modular Structure (Already Exists)
+Found existing modularization in workflow_engine_modules/:
+- models.py: 271 LOC (Workflow, WorkflowStep, WorkflowStepType)
+- executor.py: 335 LOC (WorkflowEngine class)  
+- step_types.py: 363 LOC (TaskStep, ConditionStep)
+- __init__.py: 20 LOC (Public API exports)
+- Total modular: 989 LOC
+
+## Test Status
+Tests failing due to API mismatches:
+- TaskStep/ConditionStep constructor signatures different
+- Workflow.from_dict expects different step structure
+- WorkflowEngine.create_workflow signature mismatch
+
+## Complexity Notes
+Primary branching constructs per major function:
+- WorkflowEngine._execute_workflow: ~8 branching points (try/except, while loops, conditionals)
+- WorkflowEngine._execute_step: ~12 branching points (step type switches, condition checks)
+- WorkflowStep.execute: ~6 branching points (status checks, error handling)
+
+## Next Steps
+1. Fix API compatibility between original and modular versions
+2. Ensure test suite passes with modular implementation
+3. Verify public import surface preservation
+4. Document final metrics comparison

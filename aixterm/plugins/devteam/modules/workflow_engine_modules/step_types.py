@@ -120,9 +120,7 @@ class TaskStep(WorkflowStep):
 
         return step
 
-    async def _execute(
-        self, context: Dict[str, Any], workflow: "Workflow"
-    ) -> Dict[str, Any]:
+    async def _execute(self, context: Dict[str, Any], workflow: "Workflow") -> Dict[str, Any]:
         """
         Execute the task step.
 
@@ -193,12 +191,8 @@ class TaskStep(WorkflowStep):
                 self.error = "Task failed"
         finally:
             # Unsubscribe from task events
-            workflow_engine.event_bus.unsubscribe(
-                EventType.TASK_COMPLETED, handle_task_event
-            )
-            workflow_engine.event_bus.unsubscribe(
-                EventType.TASK_FAILED, handle_task_event
-            )
+            workflow_engine.event_bus.unsubscribe(EventType.TASK_COMPLETED, handle_task_event)
+            workflow_engine.event_bus.unsubscribe(EventType.TASK_FAILED, handle_task_event)
 
         return context
 
@@ -307,9 +301,7 @@ class ConditionStep(WorkflowStep):
 
         return step
 
-    async def _execute(
-        self, context: Dict[str, Any], workflow: "Workflow"
-    ) -> Dict[str, Any]:
+    async def _execute(self, context: Dict[str, Any], workflow: "Workflow") -> Dict[str, Any]:
         """
         Execute the condition step.
 
@@ -351,9 +343,7 @@ class ConditionStep(WorkflowStep):
             # Create a safe subset of the context for evaluation
             safe_context = {}
             for key, value in context.items():
-                if isinstance(
-                    value, (bool, int, float, str, list, dict, set, type(None))
-                ):
+                if isinstance(value, (bool, int, float, str, list, dict, set, type(None))):
                     safe_context[key] = value
 
             # Evaluate the condition
