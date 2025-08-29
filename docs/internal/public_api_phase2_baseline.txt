@@ -1,0 +1,154 @@
+Phase 2 Public API Baseline - Batch 9
+==================================================
+
+Generated: 2025-08-29 19:11:40
+Phase 2 Completion - Public API Surface Documentation
+
+This file documents all intended public modules & exported symbols
+Format: module_path | symbol_name | symbol_type | location | purpose
+
+## Core AIxTerm Module (aixterm)
+
+### Explicit __all__ Exports
+aixterm | AIxTermConfig | export | __init__.py | Core public interface
+aixterm | TerminalContext | export | __init__.py | Core public interface
+aixterm | DisplayManager | export | __init__.py | Core public interface
+aixterm | create_display_manager | export | __init__.py | Core public interface
+aixterm | LLMClient | export | __init__.py | Core public interface
+aixterm | MCPClient | export | __init__.py | Core public interface
+aixterm | CleanupManager | export | __init__.py | Core public interface
+
+### aixterm.config - Configuration management
+aixterm.config | AIxTermConfig | class | Line 13 | Manages AIxTerm configuration with validation and MCP server...
+aixterm.config | save_config | function | Line 372 | Save current configuration to file.
+aixterm.config | save | function | Line 383 | Save current configuration to file....
+aixterm.config | get | function | Line 395 | Get configuration value....
+aixterm.config | set | function | Line 415 | Set configuration value....
+aixterm.config | get_mcp_servers | function | Line 434 | Get list of enabled MCP servers....
+aixterm.config | add_mcp_server | function | Line 446 | Add MCP server to configuration....
+aixterm.config | remove_mcp_server | function | Line 465 | Remove MCP server from configuration....
+aixterm.config | get_tool_management_config | function | Line 481 | Get tool management configuration....
+aixterm.config | get_tool_tokens_reserve | function | Line 490 | Get number of tokens to reserve for tool definitions....
+aixterm.config | create_default_config | function | Line 501 | Create a default configuration file....
+aixterm.config | update_response_timing | function | Line 540 | Update running average of response times for adaptive progre...
+aixterm.config | config | function | Line 582 | Get full configuration dictionary.
+aixterm.config | get_total_context_size | function | Line 594 | Get the total context window size....
+aixterm.config | get_response_buffer_size | function | Line 605 | Get the response buffer size....
+aixterm.config | get_available_context_size | function | Line 617 | Get the available context size for input after reserving res...
+aixterm.config | get_openai_key | function | Line 629 | Get OpenAI API key from config....
+aixterm.config | get_openai_base_url | function | Line 640 | Get OpenAI base URL from config....
+
+### aixterm.mcp_client - MCP protocol client
+aixterm.mcp_client | ProgressParams | class | Line 18 | Progress notification parameters.
+aixterm.mcp_client | ProgressCallback | class | Line 27 | Wrapper for progress callback functions with timeout support...
+aixterm.mcp_client | MCPError | class | Line 60 | Exception raised for MCP-related errors.
+aixterm.mcp_client | MCPClient | class | Line 66 | Client for communicating with MCP servers using the official...
+aixterm.mcp_client | MCPServer | class | Line 402 | Represents a single MCP server instance using the official S...
+aixterm.mcp_client | is_expired | function | Line 53 | Check if the callback has expired.
+aixterm.mcp_client | register_progress_callback | function | Line 106 | Register a progress callback for a specific token....
+aixterm.mcp_client | unregister_progress_callback | function | Line 122 | Unregister a progress callback....
+aixterm.mcp_client | handle_progress_notification | function | Line 131 | Handle progress notifications from MCP servers....
+aixterm.mcp_client | cleanup_expired_callbacks | function | Line 169 | Clean up expired progress callbacks.
+aixterm.mcp_client | initialize | function | Line 189 | Initialize MCP servers.
+aixterm.mcp_client | get_available_tools | function | Line 214 | Get all available tools from MCP servers....
+aixterm.mcp_client | call_tool | function | Line 239 | Call a tool on an MCP server....
+aixterm.mcp_client | call_tool_with_progress | function | Line 269 | Call a tool with progress notification support....
+aixterm.mcp_client | shutdown | function | Line 337 | Shutdown all MCP servers.
+aixterm.mcp_client | get_server_status | function | Line 366 | Get status of all MCP servers....
+aixterm.mcp_client | list_tools | function | Line 382 | List all available tools from all servers....
+aixterm.mcp_client | start | function | Line 428 | Start the MCP server.
+aixterm.mcp_client | stop | function | Line 558 | Stop the MCP server.
+aixterm.mcp_client | is_running | function | Line 641 | Check if server is running.
+aixterm.mcp_client | get_pid | function | Line 645 | Get server process PID (not available with SDK).
+aixterm.mcp_client | get_uptime | function | Line 649 | Get server uptime in seconds.
+aixterm.mcp_client | list_tools | function | Line 655 | List available tools from the server....
+aixterm.mcp_client | call_tool | function | Line 709 | Call a tool on the server....
+aixterm.mcp_client | run_loop | function | Line 94 | MCP protocol client function
+
+### aixterm.cleanup - Resource cleanup utilities
+aixterm.cleanup | CleanupManager | class | Line 12 | Manages cleanup of log files and temporary data.
+aixterm.cleanup | should_run_cleanup | function | Line 25 | Check if cleanup should be run based on configured interval....
+aixterm.cleanup | run_cleanup | function | Line 42 | Run cleanup operations....
+aixterm.cleanup | get_cleanup_status | function | Line 308 | Get cleanup status and statistics....
+aixterm.cleanup | force_cleanup_now | function | Line 357 | Force immediate cleanup regardless of schedule....
+aixterm.cleanup | disable_cleanup | function | Line 365 | Disable automatic cleanup.
+aixterm.cleanup | enable_cleanup | function | Line 370 | Enable automatic cleanup.
+aixterm.cleanup | shutdown | function | Line 383 | Shutdown the cleanup manager and release resources.
+aixterm.cleanup | get_stats | function | Line 388 | Get cleanup statistics and status....
+
+### aixterm.utils - General utilities
+aixterm.utils | get_logger | function | Line 11 | Get a configured logger instance....
+aixterm.utils | get_current_shell | function | Line 48 | Detect the current shell from environment variables....
+aixterm.utils | format_file_size | function | Line 78 | Format file size in human-readable format....
+
+
+### aixterm.context.__init__ - Context management
+aixterm.context.__init__ | TerminalContext | export | __init__.py | Context management component
+aixterm.context.__init__ | TokenManager | export | __init__.py | Context management component
+aixterm.context.__init__ | ToolOptimizer | export | __init__.py | Context management component
+aixterm.context.__init__ | LogProcessor | export | __init__.py | Context management component
+aixterm.context.__init__ | extract_commands_from_log | export | __init__.py | Context management component
+aixterm.context.__init__ | extract_conversation_from_log | export | __init__.py | Context management component
+aixterm.context.__init__ | build_tiered_summary | export | __init__.py | Context management component
+aixterm.context.__init__ | truncate_text_to_tokens | export | __init__.py | Context management component
+aixterm.context.__init__ | read_and_truncate_log | export | __init__.py | Context management component
+aixterm.context.__init__ | get_current_tty | export | __init__.py | Context management component
+aixterm.context.__init__ | get_active_ttys | export | __init__.py | Context management component
+
+### aixterm.display.__init__ - Display management
+aixterm.display.__init__ | DisplayType | export | __init__.py | Display management component
+aixterm.display.__init__ | MessageType | export | __init__.py | Display management component
+aixterm.display.__init__ | DisplayManager | export | __init__.py | Display management component
+aixterm.display.__init__ | ContentStreamer | export | __init__.py | Display management component
+aixterm.display.__init__ | StatusDisplay | export | __init__.py | Display management component
+aixterm.display.__init__ | TerminalController | export | __init__.py | Display management component
+aixterm.display.__init__ | create_display_manager | export | __init__.py | Display management component
+
+### aixterm.llm.__init__ - LLM client
+aixterm.llm.__init__ | LLMClient | export | __init__.py | LLM client component
+aixterm.llm.__init__ | LLMError | export | __init__.py | LLM client component
+aixterm.llm.__init__ | LLMClientBase | export | __init__.py | LLM client component
+aixterm.llm.__init__ | ContextHandler | export | __init__.py | LLM client component
+aixterm.llm.__init__ | ProgressManager | export | __init__.py | LLM client component
+aixterm.llm.__init__ | RequestHandler | export | __init__.py | LLM client component
+aixterm.llm.__init__ | StreamingHandler | export | __init__.py | LLM client component
+aixterm.llm.__init__ | ThinkingProcessor | export | __init__.py | LLM client component
+aixterm.llm.__init__ | ToolCompletionHandler | export | __init__.py | LLM client component
+
+### aixterm.main.__init__ - Main application
+aixterm.main.__init__ | AIxTerm | export | __init__.py | Main application component
+aixterm.main.__init__ | AIxTermApp | export | __init__.py | Main application component
+aixterm.main.__init__ | main | export | __init__.py | Main application component
+aixterm.main.__init__ | ToolsManager | export | __init__.py | Main application component
+aixterm.main.__init__ | StatusManager | export | __init__.py | Main application component
+aixterm.main.__init__ | ShellIntegrationManager | export | __init__.py | Main application component
+
+### aixterm.plugins.__init__ - Plugin system
+aixterm.plugins.__init__ | Plugin | export | __init__.py | Plugin system component
+aixterm.plugins.__init__ | PluginManager | export | __init__.py | Plugin system component
+aixterm.plugins.__init__ | PluginServiceHandlers | export | __init__.py | Plugin system component
+aixterm.plugins.__init__ | register_plugin_commands | export | __init__.py | Plugin system component
+aixterm.plugins.__init__ | handle_plugin_command | export | __init__.py | Plugin system component
+
+### aixterm.service.__init__ - Service management
+aixterm.service.__init__ | AIxTermService | export | __init__.py | Service management component
+aixterm.service.__init__ | run_service | export | __init__.py | Service management component
+aixterm.service.__init__ | ServiceServer | export | __init__.py | Service management component
+aixterm.service.__init__ | PluginManager | export | __init__.py | Service management component
+aixterm.service.__init__ | ContextManager | export | __init__.py | Service management component
+aixterm.service.__init__ | is_admin | export | __init__.py | Service management component
+aixterm.service.__init__ | get_installer | export | __init__.py | Service management component
+aixterm.service.__init__ | ServiceInstaller | export | __init__.py | Service management component
+aixterm.service.__init__ | WindowsServiceInstaller | export | __init__.py | Service management component
+aixterm.service.__init__ | LinuxServiceInstaller | export | __init__.py | Service management component
+aixterm.service.__init__ | MacOSServiceInstaller | export | __init__.py | Service management component
+aixterm.service.__init__ | UnsupportedPlatformError | export | __init__.py | Service management component
+
+### aixterm.context.log_processor.processor - Specialized module
+aixterm.context.log_processor.processor | LogProcessor | class | implementation | Core implementation class
+
+### aixterm.display.manager - Specialized module
+aixterm.display.manager | DisplayManager | class | implementation | Core implementation class
+
+### aixterm.llm.client.__init__ - Specialized module
+aixterm.llm.client.__init__ | LLMClient | class | implementation | Core implementation class
