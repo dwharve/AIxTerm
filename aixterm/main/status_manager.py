@@ -1,7 +1,7 @@
 """Status reporting and maintenance functionality for AIxTerm."""
 from typing import Any, Dict
 
-from aixterm.utils import get_logger
+from ..utils import get_logger
 
 
 class StatusManager:

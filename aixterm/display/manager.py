@@ -64,18 +64,18 @@ class DisplayManager:
         show_immediately: bool = True,
         clear_others: bool = True,
     ) -> "_ProgressDisplay":
-        """Create a new progress display.
+        """Create a new progress display for user feedback.
 
         Args:
             token: Unique identifier for this progress (defaults to "default" if None)
-            title: Display title
-            total: Total expected progress (None for indeterminate)
-            display_type: Type of display (defaults to instance default)
-            show_immediately: Whether to show immediately
-            clear_others: Whether to clear other progress displays first
+            title: Display title for the progress indicator
+            total: Total number of steps (for percentage display)
+            display_type: Type of display to use (spinner, progress bar, etc.)
+            show_immediately: Whether to show the progress immediately
+            clear_others: Whether to clear other progress displays
 
         Returns:
-            Progress display interface
+            Progress display object for updates and control
         """
         # Handle case where title is provided as first arg and token is missing
         if token is None:

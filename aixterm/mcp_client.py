@@ -92,6 +92,7 @@ class MCPClient:
         """Start background event loop for async operations."""
 
         def run_loop() -> None:
+            """Background event loop runner for async MCP operations."""
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
             self._loop.run_forever()
@@ -274,6 +275,18 @@ class MCPClient:
         progress_callback: Optional[Callable[[ProgressParams], None]] = None,
         timeout: Optional[float] = 300.0,
     ) -> Any:
+        """Call a tool with progress notification support.
+        
+        Args:
+            tool_name: Name of the tool to call
+            server_name: Name of the MCP server
+            arguments: Tool arguments
+            progress_callback: Optional callback for progress updates  
+            timeout: Timeout for the operation
+            
+        Returns:
+            Tool execution result
+        """
         """Call a tool with progress notification support.
 
         Args:
