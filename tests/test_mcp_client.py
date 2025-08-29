@@ -128,15 +128,22 @@ class TestMCPClient:
         mock_server.start.assert_called_once()
         assert result == {"result": "success"}
 
-    def test_shutdown(self, mcp_client):
+    @patch("aixterm.mcp_client.LifecycleManager")
+    def test_shutdown(self, mock_lifecycle_manager_class, mcp_client):
         """Test shutting down client."""
+        mock_lifecycle_manager = Mock()
+        mock_lifecycle_manager_class.return_value = mock_lifecycle_manager
+        mock_lifecycle_manager.shutdown_registry.return_value = True
+        
         mock_server = Mock()
         mcp_client.servers["test-server"] = mock_server
         mcp_client._initialized = True
 
         mcp_client.shutdown()
 
-        mock_server.stop.assert_called_once()
+        mock_lifecycle_manager.shutdown_registry.assert_called_once_with(
+            mcp_client.servers, "MCP servers"
+        )
         assert len(mcp_client.servers) == 0
         assert not mcp_client._initialized
 
@@ -262,7 +269,7 @@ class TestMCPServer:
         # Mock the coroutine methods to avoid warnings
         with (
             patch.object(MCPServer, "_initialize_session", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             server = MCPServer(config, mock_logger, mock_loop)
             server._initialized = True
@@ -336,7 +343,7 @@ class TestMCPServer:
         with (
             patch.object(MCPServer, "_initialize_session", mock_coro()),
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             server = MCPServer(config, mock_logger, mock_loop)
             server._initialized = True
@@ -384,7 +391,7 @@ class TestMCPServer:
             patch.object(MCPServer, "_initialize_session", mock_coro()),
             patch.object(MCPServer, "_call_tool_async", mock_coro()),
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             server = MCPServer(config, mock_logger, mock_loop)
             server._initialized = True
@@ -424,3 +431,55 @@ class TestMCPServer:
 
         with pytest.raises(MCPError, match="Server is not running"):
             server.call_tool("test_tool", {})
+
+
+class TestMCPHelperMethods:
+    """Test helper methods for error construction."""
+
+    @pytest.fixture
+    def mock_server(self):
+        """Create mock server for testing helpers."""
+        config = {"name": "test", "command": ["echo", "test"]}
+        logger = Mock()
+        loop = Mock()
+        return MCPServer(config, logger, loop)
+
+    def test_ensure_session_initialized_with_session(self, mock_server):
+        """Test session validation when session exists."""
+        mock_server._session = Mock()
+        # Should not raise
+        mock_server._ensure_session_initialized()
+
+    def test_ensure_session_initialized_without_session(self, mock_server):
+        """Test session validation when session is None."""
+        mock_server._session = None
+        with pytest.raises(MCPError, match="Session not initialized"):
+            mock_server._ensure_session_initialized()
+
+    def test_ensure_server_running_when_running(self, mock_server):
+        """Test server state validation when running."""
+        mock_server.is_running = Mock(return_value=True)
+        # Should not raise
+        mock_server._ensure_server_running()
+
+    def test_ensure_server_running_when_stopped(self, mock_server):
+        """Test server state validation when stopped."""
+        mock_server.is_running = Mock(return_value=False)
+        with pytest.raises(MCPError, match="Server is not running"):
+            mock_server._ensure_server_running()
+
+    def test_raise_tool_call_error(self, mock_server):
+        """Test standardized tool call error construction."""
+        test_exception = ValueError("Test error message")
+        with pytest.raises(MCPError, match="Tool call failed: Test error message"):
+            mock_server._raise_tool_call_error(test_exception)
+
+    def test_mcp_client_raise_tool_call_error(self):
+        """Test standardized tool call error construction on MCPClient."""
+        config = Mock()
+        config.get_mcp_servers.return_value = []
+        client = MCPClient(config)
+        
+        test_exception = ValueError("Client test error")
+        with pytest.raises(MCPError, match="Tool call failed: Client test error"):
+            client._raise_tool_call_error(test_exception)
