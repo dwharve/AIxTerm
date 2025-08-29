@@ -328,7 +328,12 @@ class TestWorkflowEngineCharacterization:
 
     @pytest.mark.asyncio
     async def test_workflow_step_execute_pattern(self, mock_dependencies):
-        """Test that workflow step execute method follows expected pattern."""
+        """Test that workflow step execute method follows expected pattern.
+        
+        This test characterizes how the base execute() method handles 
+        NotImplementedError from _execute() implementations and manages
+        status transitions and error handling.
+        """
         # Given: a task step with mocked dependencies
         step = TaskStep(
             step_id="task_step",
@@ -342,13 +347,13 @@ class TestWorkflowEngineCharacterization:
         context = {"input_data": "test"}
 
         # When: executing step (this will test the base execute pattern)
-        # Note: We expect this to fail in characterization since _execute is not implemented
+        # We expect this to fail in characterization since _execute is not implemented
         # but we're testing the pattern and state transitions
         with pytest.raises(NotImplementedError):
             await step.execute(context, workflow_engine)
 
         # Then: step status should have transitioned to IN_PROGRESS and then back
-        # Note: In actual implementation, the status transitions happen in base execute()
+        # In actual implementation, the status transitions happen in base execute()
         # This characterizes the current error handling behavior
         assert step.status == WorkflowStepStatus.FAILED
         assert step.started_at is not None

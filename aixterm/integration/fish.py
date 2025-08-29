@@ -8,7 +8,11 @@ from .base import BaseIntegration
 
 
 class Fish(BaseIntegration):
-    """Fish shell integration handler."""
+    """Fish shell integration handler.
+    
+    Uses default implementations from BaseIntegration for is_available(),
+    validate_integration_environment(), and get_current_shell_version().
+    """
 
     def __init__(self) -> None:
         """Initialize fish integration."""
@@ -379,10 +383,6 @@ end >> (_aixterm_get_log_file) 2>/dev/null
 # Mark integration as loaded
 set -g _AIXTERM_INTEGRATION_LOADED 1
 """
-
-    # Note: is_available() and validate_integration_environment() now use 
-    # default implementations from BaseIntegration. get_current_shell_version() 
-    # also uses the default implementation.
 
     def prepare_config_directory(self) -> bool:
         """Create fish config directory if it doesn't exist."""

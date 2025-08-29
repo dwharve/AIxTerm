@@ -1,0 +1,146 @@
+Phase 2 Batch 6 - Annotation Hygiene Baseline
+==============================================
+
+Total annotations found: 131
+
+Counts by type:
+  DEPRECATED: 5
+  LEGACY: 32
+  NOTE: 86
+  TODO: 8
+
+
+Detailed annotation list:
+========================
+
+.github/copilot-instructions.md:14 - TODO: " → "doing" → "review"
+.github/copilot-instructions.md:20 - TODO: " → "doing" → "review" (not directly to complete)
+CHANGELOG.md:56 - LEGACY: examples
+CHANGELOG.md:59 - LEGACY: `.aixterm_log.*` filename pattern handling and dual-write compatibility code
+CHANGELOG.md:60 - LEGACY: sed-based filename normalization in shell integration scripts (bash/zsh/fish)
+MIGRATION.md:5 - LEGACY: HTTP "server mode" and replaces it with a single
+MIGRATION.md:28 - LEGACY: network/server settings) | Removed |
+MIGRATION.md:33 - LEGACY: network/server configuration sections from prior versions are no
+README.md:85 - NOTE: **: AIxTerm provides two command aliases after installation:
+aixterm/config_env/__init__.py:3 - NOTE: AIxTermConfig is imported from the parent config module to maintain compatibility
+aixterm/context/terminal_context.py:318 - NOTE: This is a fallback when shell integration is not available.
+aixterm/integration/bash.py:231 - NOTE: is_available() and validate_integration_environment() now use
+aixterm/integration/fish.py:383 - NOTE: is_available() and validate_integration_environment() now use
+aixterm/integration/zsh.py:390 - NOTE: is_available() and validate_integration_environment() now use
+aixterm/llm/client/requests.py:230 - NOTE: ": "Streaming response not captured in debug"}
+aixterm/main/cli.py:384 - NOTE: ", "Streaming response"))
+aixterm/plugins/devteam/agents/__init__.py:41 - NOTE: agent_type, name, version, description, initialize, shutdown,
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:95 - NOTE: Optional[str] = None
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:103 - NOTE: Optional note to add
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:115 - NOTE: 
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:116 - NOTE: , "system")
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:263 - NOTE: str, author: str = "system"
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:266 - NOTE: to a task.
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:270 - NOTE: Note content
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:271 - NOTE: (default: "system")
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:280 - NOTE: , author)
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:282 - NOTE: added event
+aixterm/plugins/devteam/modules/task_manager_modules/manager.py:288 - NOTE: , "author": author},
+aixterm/plugins/devteam/modules/task_manager_modules/models.py:194 - NOTE: str, author: str = "system") -> None:
+aixterm/plugins/devteam/modules/task_manager_modules/models.py:196 - NOTE: to the task.
+aixterm/plugins/devteam/modules/task_manager_modules/models.py:199 - NOTE: Note content
+aixterm/plugins/devteam/modules/task_manager_modules/models.py:200 - NOTE: (default: "system")
+aixterm/plugins/devteam/modules/task_manager_modules/models.py:203 - NOTE: , "author": author, "timestamp": datetime.now().isoformat()}
+aixterm/plugins/devteam/modules/task_manager_original.py:204 - NOTE: str, author: str = "system") -> None:
+aixterm/plugins/devteam/modules/task_manager_original.py:206 - NOTE: to the task.
+aixterm/plugins/devteam/modules/task_manager_original.py:209 - NOTE: Note content
+aixterm/plugins/devteam/modules/task_manager_original.py:210 - NOTE: (default: "system")
+aixterm/plugins/devteam/modules/task_manager_original.py:213 - NOTE: , "author": author, "timestamp": datetime.now().isoformat()}
+aixterm/plugins/devteam/modules/task_manager_original.py:307 - NOTE: Optional[str] = None
+aixterm/plugins/devteam/modules/task_manager_original.py:315 - NOTE: Optional note to add to the task
+aixterm/plugins/devteam/modules/task_manager_original.py:327 - NOTE: 
+aixterm/plugins/devteam/modules/task_manager_original.py:328 - NOTE: )
+aixterm/plugins/devteam/modules/task_manager_original.py:469 - NOTE: str, author: str = "system"
+aixterm/plugins/devteam/modules/task_manager_original.py:472 - NOTE: to a task.
+aixterm/plugins/devteam/modules/task_manager_original.py:476 - NOTE: Note content
+aixterm/plugins/devteam/modules/task_manager_original.py:477 - NOTE: 
+aixterm/plugins/devteam/modules/task_manager_original.py:486 - NOTE: , author)
+aixterm/plugins/devteam/modules/task_manager_original.py:494 - NOTE: , "author": author},
+aixterm/plugins/devteam/plugin/core.py:317 - DEPRECATED: when no loop running.
+docs/audit/CHANGELOG_PHASE2.md:54 - LEGACY: Findings
+docs/audit/CHANGELOG_PHASE2.md:109 - LEGACY: Code Removal
+docs/audit/CHANGELOG_PHASE2.md:111 - LEGACY: and deprecated code paths, annotations, and related documentation from the codebase.
+docs/audit/CHANGELOG_PHASE2.md:115 - LEGACY: code remnants to align with the directive: "Do not keep any backwards compatibility or legacy code a
+docs/audit/CHANGELOG_PHASE2.md:122 - LEGACY: findings superseded |
+docs/audit/CHANGELOG_PHASE2.md:124 - LEGACY: annotations after cleanup |
+docs/audit/CHANGELOG_PHASE2.md:125 - LEGACY: HTTP transport" language |
+docs/audit/CHANGELOG_PHASE2.md:127 - LEGACY: Removal
+docs/audit/CHANGELOG_PHASE2.md:130 - LEGACY: HTTP and network accessor comments |
+docs/audit/CHANGELOG_PHASE2.md:131 - LEGACY: log pattern reference |
+docs/audit/CHANGELOG_PHASE2.md:137 - LEGACY: method and updated comments |
+docs/audit/CHANGELOG_PHASE2.md:138 - LEGACY: function comment |
+docs/audit/CHANGELOG_PHASE2.md:139 - LEGACY: function comment |
+docs/audit/CHANGELOG_PHASE2.md:144 - LEGACY: " annotations from event constants |
+docs/audit/CHANGELOG_PHASE2.md:152 - LEGACY: /Dead" to "Dead Code", removed Legacy Format section |
+docs/audit/CHANGELOG_PHASE2.md:153 - LEGACY: /Dead" to "Dead Code" |
+docs/audit/CHANGELOG_PHASE2.md:158 - LEGACY: and new" to "old and new" |
+docs/audit/CHANGELOG_PHASE2.md:159 - LEGACY: )" from docstring |
+docs/audit/CHANGELOG_PHASE2.md:163 - LEGACY: Annotation Elimination
+docs/audit/CHANGELOG_PHASE2.md:164 - LEGACY: annotations across codebase
+docs/audit/CHANGELOG_PHASE2.md:165 - LEGACY: annotations (confirmed by regenerated audit)
+docs/audit/CHANGELOG_PHASE2.md:166 - DEPRECATED: **: Reduced from multiple files to essential technical references only
+docs/audit/CHANGELOG_PHASE2.md:169 - LEGACY: /Dead)**: ELIMINATED from findings table
+docs/audit/CHANGELOG_PHASE2.md:170 - NOTE: annotations) and F002 (duplications) remain
+docs/audit/CHANGELOG_PHASE2.md:171 - LEGACY: Format Subsection**: REMOVED from duplication analysis
+docs/audit/CHANGELOG_PHASE2.md:175 - LEGACY: language)
+docs/audit/CHANGELOG_PHASE2.md:181 - LEGACY: findings
+docs/audit/CHANGELOG_PHASE2.md:187 - LEGACY: Annotations Removed: 26+
+docs/audit/README.md:37 - TODO: /FIXME/HACK/DEPRECATED comments
+docs/audit/audit.md:372 - DEPRECATED: | when no loop running. |
+docs/audit/audit.md:373 - DEPRECATED: | ', 'LEGACY'] else "Inconsistency", |
+docs/audit/audit.md:374 - NOTE: | **: AIxTerm provides two command aliases after installation: |
+docs/audit/audit.md:375 - NOTE: | AIxTermConfig is imported from the parent config module to maintain compatibility |
+docs/audit/audit.md:376 - NOTE: | This is a fallback when shell integration is not available. |
+docs/audit/audit.md:377 - NOTE: | is_available() and validate_integration_environment() now use |
+docs/audit/audit.md:378 - NOTE: | is_available() and validate_integration_environment() now use |
+docs/audit/audit.md:379 - NOTE: | is_available() and validate_integration_environment() now use |
+docs/audit/audit.md:380 - NOTE: | ": "Streaming response not captured in debug"} |
+docs/audit/audit.md:381 - NOTE: | ", "Streaming response")) |
+docs/audit/audit.md:382 - NOTE: | agent_type, name, version, description, initialize, shutdown, |
+docs/audit/audit.md:383 - NOTE: | Optional[str] = None |
+docs/audit/audit.md:384 - NOTE: | Optional note to add |
+docs/audit/audit.md:385 - NOTE: |  |
+docs/audit/audit.md:386 - NOTE: | , "system") |
+docs/audit/audit.md:387 - NOTE: | str, author: str = "system" |
+docs/audit/audit.md:388 - NOTE: | to a task. |
+docs/audit/audit.md:389 - NOTE: | Note content |
+docs/audit/audit.md:390 - NOTE: | (default: "system") |
+docs/audit/audit.md:391 - NOTE: | , author) |
+docs/audit/audit.md:392 - NOTE: | added event |
+docs/audit/audit.md:393 - NOTE: | , "author": author}, |
+docs/audit/audit.md:394 - NOTE: | str, author: str = "system") -> None: |
+docs/audit/audit.md:395 - NOTE: | to the task. |
+docs/audit/audit.md:396 - NOTE: | Note content |
+docs/audit/audit.md:397 - NOTE: | (default: "system") |
+docs/audit/audit.md:398 - NOTE: | , "author": author, "timestamp": datetime.now().isoformat()} |
+docs/audit/audit.md:399 - NOTE: | str, author: str = "system") -> None: |
+docs/audit/audit.md:400 - NOTE: | to the task. |
+docs/audit/audit.md:401 - NOTE: | Note content |
+docs/audit/audit.md:517 - NOTE: annotations across codebase | Med | M | Review and address NOTE annotations systematically |
+docs/audit/audit.md:533 - TODO: |FIXME|HACK|DEPRECATED|LEGACY|XXX|NOTE)\b`
+scripts/generate_audit.py:432 - TODO: /FIXME/HACK/DEPRECATED/LEGACY annotations."""
+scripts/generate_audit.py:435 - TODO: |FIXME|HACK|DEPRECATED|LEGACY|XXX|NOTE)\b:?\s*(.*)'
+scripts/generate_audit.py:650 - TODO: /FIXME comments indicate maintenance needs
+scripts/generate_audit.py:717 - DEPRECATED: ', 'LEGACY'] else "Inconsistency",
+scripts/generate_audit.py:1046 - TODO: |FIXME|HACK|DEPRECATED|LEGACY|XXX|NOTE)\\b`
+tests/test_integration.py:318 - NOTE: it's --list-tools, not --tools
+tests/test_shell_integration.py:54 - NOTE: "]
+tests/test_shell_integration.py:88 - NOTE: "]
+tests/test_shell_integration.py:124 - NOTE: "]
+tests/test_shell_integration.py:183 - NOTE: for note in notes)
+tests/test_task_manager_characterization.py:244 - NOTE: addition behavior."""
+tests/test_task_manager_characterization.py:247 - NOTE: "
+tests/test_task_manager_characterization.py:248 - NOTE: "
+tests/test_task_manager_characterization.py:260 - NOTE: "
+tests/test_task_manager_characterization.py:288 - NOTE: ", "Progress update"]
+tests/test_task_manager_characterization.py:312 - NOTE: ", "Progress update"]
+tests/test_task_manager_characterization.py:328 - NOTE: ")
+tests/test_task_manager_characterization.py:352 - NOTE: "]
+tests/test_task_manager_characterization.py:571 - NOTE: The actual behavior would be verified by running the test
+tests/test_workflow_engine_characterization.py:345 - NOTE: We expect this to fail in characterization since _execute is not implemented
+tests/test_workflow_engine_characterization.py:351 - NOTE: In actual implementation, the status transitions happen in base execute()

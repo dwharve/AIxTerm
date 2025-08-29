@@ -15,13 +15,14 @@ logger = logging.getLogger(__name__)
 
 
 class Agent(AbstractAgentBase):
-    """
-    Base class for all AI agents in the DevTeam plugin.
+    """Base class for all AI agents in the DevTeam plugin.
 
     Agents are specialized AI components that handle specific roles in the software
     development process, such as project management, architecture, coding, etc.
     
     This class now inherits from AbstractAgentBase to eliminate duplication.
+    Inherited methods include: agent_type, name, version, description, initialize, 
+    shutdown, process_task, and _get_agent_config.
     """
 
     def __init__(self, plugin):
@@ -37,9 +38,6 @@ class Agent(AbstractAgentBase):
             f"aixterm.plugin.devteam.agent.{self.agent_type}"
         )
         self.config = self._get_agent_config()
-
-    # Note: agent_type, name, version, description, initialize, shutdown, 
-    # process_task, and _get_agent_config are now inherited from AbstractAgentBase
 
 
 class AgentRegistry:

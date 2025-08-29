@@ -8,7 +8,11 @@ from .base import BaseIntegration
 
 
 class Bash(BaseIntegration):
-    """Bash shell integration handler."""
+    """Bash shell integration handler.
+    
+    Uses default implementations from BaseIntegration for is_available(),
+    validate_integration_environment(), and get_current_shell_version().
+    """
 
     def __init__(self) -> None:
         """Initialize bash integration."""
@@ -227,10 +231,6 @@ else
     echo "AIxTerm: Integration loaded. Use 'aixterm_status' for info."
 fi
 """
-
-    # Note: is_available() and validate_integration_environment() now use 
-    # default implementations from BaseIntegration. get_current_shell_version() 
-    # also uses the default implementation.
 
     def get_installation_notes(self) -> List[str]:
         """Return bash-specific installation notes."""
