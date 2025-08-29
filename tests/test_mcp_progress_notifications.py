@@ -375,7 +375,7 @@ class TestMCPClient(unittest.TestCase):
             patch.object(MCPServer, "_initialize_session", mock_coro()),
             patch.object(MCPServer, "_call_tool_async", mock_coro()),
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
 
             mock_server = Mock()
@@ -418,7 +418,7 @@ class TestMCPClient(unittest.TestCase):
             patch.object(MCPServer, "_initialize_session", mock_coro()),
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
             patch.object(MCPServer, "_call_tool_async", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             mock_server = Mock()
             mock_server.is_running.return_value = False
@@ -483,7 +483,7 @@ class TestMCPServer(unittest.TestCase):
             patch.object(MCPServer, "_initialize_session", mock_coro()),
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
             patch.object(MCPServer, "_call_tool_async", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             self.assertEqual(self.server.config, self.config)
             self.assertEqual(self.server.logger, self.mock_logger)
@@ -563,7 +563,7 @@ class TestMCPServer(unittest.TestCase):
             patch.object(MCPServer, "_initialize_session", mock_coro()),
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
             patch.object(MCPServer, "_call_tool_async", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             self.server._initialized = True
             self.server._session = Mock()
@@ -605,7 +605,7 @@ class TestMCPServer(unittest.TestCase):
         # Mock coroutines to avoid warnings
         with (
             patch.object(MCPServer, "_initialize_session", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
 
             self.server._initialized = True
@@ -671,7 +671,7 @@ class TestMCPServer(unittest.TestCase):
             patch.object(MCPServer, "_initialize_session", mock_coro()),
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
             patch.object(MCPServer, "_call_tool_async", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             self.server._initialized = True
             self.server._session = Mock()

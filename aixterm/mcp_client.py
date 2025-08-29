@@ -566,7 +566,7 @@ class MCPServer:
             # Clean up session in the event loop
             if self._session and self.loop:
                 future = asyncio.run_coroutine_threadsafe(
-                    self._shielded_cleanup_session(), self.loop
+                    self._cleanup_session_safely(), self.loop
                 )
                 try:
                     future.result(timeout=5)
@@ -621,10 +621,12 @@ class MCPServer:
             self._session = None
             self._client_context = None
 
-    async def _shielded_cleanup_session(self) -> None:
-        """Run session cleanup safely to avoid context manager issues."""
-        # Use the safe cleanup method that checks task context
-        await self._cleanup_session_safely()
+    def _ensure_session_initialized(self) -> None:
+        """Ensure session is initialized, raise MCPError if not."""
+        if not self._session:
+            raise MCPError("Session not initialized")
+
+
 
     def is_running(self) -> bool:
         """Check if server is running."""
@@ -692,8 +694,7 @@ class MCPServer:
 
     async def _list_tools_async(self) -> Any:
         """List tools asynchronously."""
-        if not self._session:
-            raise MCPError("Session not initialized")
+        self._ensure_session_initialized()
         return await self._session.list_tools()
 
     def call_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
@@ -748,6 +749,5 @@ class MCPServer:
 
     async def _call_tool_async(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
         """Call tool asynchronously."""
-        if not self._session:
-            raise MCPError("Session not initialized")
+        self._ensure_session_initialized()
         return await self._session.call_tool(tool_name, arguments)

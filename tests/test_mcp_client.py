@@ -128,15 +128,22 @@ class TestMCPClient:
         mock_server.start.assert_called_once()
         assert result == {"result": "success"}
 
-    def test_shutdown(self, mcp_client):
+    @patch("aixterm.mcp_client.LifecycleManager")
+    def test_shutdown(self, mock_lifecycle_manager_class, mcp_client):
         """Test shutting down client."""
+        mock_lifecycle_manager = Mock()
+        mock_lifecycle_manager_class.return_value = mock_lifecycle_manager
+        mock_lifecycle_manager.shutdown_registry.return_value = True
+        
         mock_server = Mock()
         mcp_client.servers["test-server"] = mock_server
         mcp_client._initialized = True
 
         mcp_client.shutdown()
 
-        mock_server.stop.assert_called_once()
+        mock_lifecycle_manager.shutdown_registry.assert_called_once_with(
+            mcp_client.servers, "MCP servers"
+        )
         assert len(mcp_client.servers) == 0
         assert not mcp_client._initialized
 
@@ -262,7 +269,7 @@ class TestMCPServer:
         # Mock the coroutine methods to avoid warnings
         with (
             patch.object(MCPServer, "_initialize_session", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             server = MCPServer(config, mock_logger, mock_loop)
             server._initialized = True
@@ -336,7 +343,7 @@ class TestMCPServer:
         with (
             patch.object(MCPServer, "_initialize_session", mock_coro()),
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             server = MCPServer(config, mock_logger, mock_loop)
             server._initialized = True
@@ -384,7 +391,7 @@ class TestMCPServer:
             patch.object(MCPServer, "_initialize_session", mock_coro()),
             patch.object(MCPServer, "_call_tool_async", mock_coro()),
             patch.object(MCPServer, "_list_tools_async", mock_coro()),
-            patch.object(MCPServer, "_shielded_cleanup_session", mock_coro()),
+            patch.object(MCPServer, "_cleanup_session_safely", mock_coro()),
         ):
             server = MCPServer(config, mock_logger, mock_loop)
             server._initialized = True
